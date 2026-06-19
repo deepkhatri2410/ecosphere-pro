@@ -13,6 +13,7 @@ const state = {
     wasteRecycle: 'some', // all, most, some, none
     wasteShopping: 'average' // heavy, average, minimal
   },
+
   // Checklist states
   completedActions: new Set(),
   // Logged custom actions
@@ -21,10 +22,10 @@ const state = {
   offsetsPurchased: 0, // kg CO2
   offsetSpentUsd: 0,
   activeView: 'dashboard',
-  
+
   // Pro: Active what-if scenario preset
   activeScenario: 'none', // none, electric, plant-based, absolute-zero
-  
+
   // Pro: Library filter & search
   librarySearch: '',
   libraryFilter: 'all'
@@ -68,7 +69,23 @@ const APP_CONSTANTS = {
   TARGET_BUDGET_TON: 3.0,
   MAX_SCALE_TON: 20,
   OFFSET_COST_PER_TON_USD: 12,
-  MAX_LOGGED_ACTIVITIES: 20
+  MAX_LOGGED_ACTIVITIES: 20,
+  US_AVERAGE_TONS: 15.5,
+  MIN_FOOTPRINT_TONS: 0.3,
+  CHART_HEIGHT: 180,
+  CHART_WIDTH: 320,
+  CHART_PADDING: 40,
+  RADIAL_CIRCUMFERENCE: 314.16,
+  RADIAL_RADIUS: 50,
+  RADIAL_CENTER: 60,
+  MAX_CHART_SCALE: 16,
+  FORECAST_YEARS: [2026, 2028, 2030, 2032, 2034, 2036],
+  BUDGET_MAX_SCALE: 8.0,
+  SCENARIO_MIN_TONS: 0.3,
+  SOLAR_GRID_FACTOR: 0.02 * 12,
+  SCENARIO_VEGAN_DIET_FOOTPRINT: 800,
+  MINIMALIST_DIET_FOOTPRINT: 800,
+  MINIMALIST_WASTE_FOOTPRINT: 200
 };
 
 let animationFrameId = null;
@@ -128,6 +145,18 @@ stateManager.subscribe(() => {
   requestUpdate();
 });
 
+const domCache = new Map();
+function getCachedElement(id) {
+  if (domCache.has(id)) return domCache.get(id);
+  const element = document.getElementById(id);
+  domCache.set(id, element);
+  return element;
+}
+
+function dispatchState(update) {
+  stateManager.dispatch(prevState => ({ ...prevState, ...update }));
+}
+
 function sanitizeText(value) {
   if (value === undefined || value === null) return '';
   return String(value)
@@ -160,7 +189,7 @@ function createSvgElementSafe(tag, attributes = {}) {
 }
 
 function announceStatus(message) {
-  const liveRegion = document.getElementById('aria-live-region');
+  const liveRegion = getCachedElement('aria-live-region');
   if (!liveRegion) return;
   liveRegion.textContent = sanitizeText(message);
 }
@@ -232,12 +261,12 @@ document.addEventListener('DOMContentLoaded', () => {
   setupActionChecklist();
   setupLogActivities();
   setupOffsetSimulator();
-  
+
   // Pro setups
   setupLibraryControls();
   setupScenarioPresets();
   setupArticleLinks();
-  
+
   // Set current date UI
   const dateIndicator = document.getElementById('current-date-element');
   if (dateIndicator) {
@@ -256,7 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
       window.print();
     });
   }
-  
+
   // Perform initial calculations & rendering
   updateCalculations();
 });
@@ -312,15 +341,13 @@ function setupNavigation() {
 }
 
 function switchView(viewName) {
-  state.activeView = viewName;
-  
+  dispatchState({ activeView: viewName });
+
   // Update sidebar active classes
   document.querySelectorAll('.nav-item').forEach(item => {
-    if (item.getAttribute('data-view') === viewName) {
-      item.classList.add('active');
-    } else {
-      item.classList.remove('active');
-    }
+    const isActive = item.getAttribute('data-view') === viewName;
+    item.classList.toggle('active', isActive);
+    item.setAttribute('aria-current', isActive ? 'page' : 'false');
   });
 
   // Switch display elements
@@ -360,8 +387,11 @@ function setupCalculatorControls() {
       el.value = state.calculator[sliderConfig.stateKey];
       out.textContent = formatValueWithUnits(sliderConfig.id, el.value);
 
+      const minValue = Number(el.min);
+      const maxValue = Number(el.max);
       el.addEventListener('input', (e) => {
         const val = Number(e.target.value);
+        if (Number.isNaN(val) || val < minValue || val > maxValue) return;
         stateManager.dispatch(prev => ({
           ...prev,
           calculator: {
@@ -388,8 +418,8 @@ function setupRadioGroup(groupName, stateKey) {
       input.checked = true;
     }
     input.addEventListener('change', (e) => {
-      state.calculator[stateKey] = e.target.value;
-      updateCalculations();
+      const value = e.target.value;
+      dispatchState({ calculator: { ...state.calculator, [stateKey]: value } });
     });
   });
 }
@@ -410,12 +440,12 @@ function formatValueWithUnits(id, val) {
 function setupActionChecklist() {
   const listContainer = document.getElementById('action-plan-checklist');
   if (!listContainer) return;
-  
+
   while (listContainer.firstChild) {
     listContainer.removeChild(listContainer.firstChild);
   }
   const fragment = document.createDocumentFragment();
-  
+
   CHECKLIST_ACTIONS.forEach(action => {
     const isChecked = state.completedActions.has(action.id);
     const card = createElementSafe('div', null, { class: `pro-action-card ${isChecked ? 'completed' : ''}`, id: `card-${action.id}` });
@@ -436,14 +466,14 @@ function setupActionChecklist() {
     rowLeft.appendChild(actionDetails);
 
     const difficultyBadge = createElementSafe('span', action.difficulty, { class: `difficulty-badge difficulty-${action.difficulty}` });
-    const costLabel = createElementSafe('div', null);
+    const costLabel = createElementSafe('div', null, { class: 'action-ticket' });
     costLabel.appendChild(createElementSafe('span', action.cost, { class: 'cost-tag' }));
-    costLabel.appendChild(createElementSafe('span', `Est: $${action.investment}`, { style: 'font-size:0.68rem; color:var(--text-dim); display:block; margin-top:2px;' }));
+    costLabel.appendChild(createElementSafe('span', `Est: $${action.investment}`, { class: 'action-meta-text' }));
 
     const paybackText = action.investment && action.savings ? `${(action.investment / action.savings).toFixed(1)} yrs` : 'Immediate';
-    const savingsLabel = createElementSafe('div', null);
+    const savingsLabel = createElementSafe('div', null, { class: 'action-ticket' });
     savingsLabel.appendChild(createElementSafe('span', `+$${action.savings}/yr`, { class: 'savings-tag' }));
-    savingsLabel.appendChild(createElementSafe('span', `Payback: ${paybackText}`, { style: 'font-size:0.68rem; color:var(--text-dim); display:block; margin-top:2px;' }));
+    savingsLabel.appendChild(createElementSafe('span', `Payback: ${paybackText}`, { class: 'action-meta-text' }));
 
     card.appendChild(rowLeft);
     card.appendChild(difficultyBadge);
@@ -453,15 +483,17 @@ function setupActionChecklist() {
     fragment.appendChild(card);
 
     checkbox.addEventListener('change', (e) => {
+      const nextActions = new Set(state.completedActions);
       if (e.target.checked) {
-        state.completedActions.add(action.id);
+        nextActions.add(action.id);
         card.classList.add('completed');
         actionName.classList.add('completed');
       } else {
-        state.completedActions.delete(action.id);
+        nextActions.delete(action.id);
         card.classList.remove('completed');
         actionName.classList.remove('completed');
       }
+      dispatchState({ completedActions: nextActions });
       requestUpdate();
     });
   });
@@ -472,12 +504,12 @@ function setupActionChecklist() {
 function setupLogActivities() {
   const optionsContainer = document.getElementById('log-options-grid');
   if (!optionsContainer) return;
-  
+
   while (optionsContainer.firstChild) {
     optionsContainer.removeChild(optionsContainer.firstChild);
   }
   const fragment = document.createDocumentFragment();
-  
+
   LOGGABLE_ACTIVITIES.forEach(act => {
     const card = createElementSafe('div', null, { class: 'activity-option-card' });
     const iconText = createElementSafe('div', null, { class: 'activity-icon-text' });
@@ -496,7 +528,7 @@ function setupLogActivities() {
     card.appendChild(logButton);
     fragment.appendChild(card);
   });
-  
+
   optionsContainer.appendChild(fragment);
   renderLoggedActivities();
 }
@@ -509,12 +541,10 @@ function logActivity(title, kgSaved, type) {
     type: sanitizeText(type),
     timestamp: new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   };
-  
-  state.loggedActivities.unshift(newLog);
-  if (state.loggedActivities.length > APP_CONSTANTS.MAX_LOGGED_ACTIVITIES) {
-    state.loggedActivities.pop();
-  }
-  
+
+  const updatedLogs = [newLog, ...state.loggedActivities].slice(0, APP_CONSTANTS.MAX_LOGGED_ACTIVITIES);
+  dispatchState({ loggedActivities: updatedLogs });
+
   saveStateToLocalStorage();
   renderLoggedActivities();
   requestUpdate();
@@ -523,18 +553,18 @@ function logActivity(title, kgSaved, type) {
 function renderLoggedActivities() {
   const list = document.getElementById('logged-actions-list');
   if (!list) return;
-  
+
   while (list.firstChild) list.removeChild(list.firstChild);
-  
+
   if (state.loggedActivities.length === 0) {
     const emptyCard = createElementSafe('div', null, { class: 'empty-log-state' });
     emptyCard.appendChild(createElementSafe('span', '🌿', { class: 'empty-log-icon' }));
-    emptyCard.appendChild(createElementSafe('strong', 'No activities logged yet'));
-    emptyCard.appendChild(createElementSafe('span', 'Log daily green steps or purchase offsets to build carbon reduction credits!'));
+    emptyCard.appendChild(createElementSafe('strong', 'No activities logged yet', { class: 'empty-log-header' }));
+    emptyCard.appendChild(createElementSafe('span', 'Log daily green steps or purchase offsets to build carbon reduction credits!', { class: 'empty-log-copy' }));
     list.appendChild(emptyCard);
     return;
   }
-  
+
   const fragment = document.createDocumentFragment();
   state.loggedActivities.forEach(entry => {
     const row = createElementSafe('div', null, { class: `log-entry-row ${entry.type === 'offset' ? 'offset-type' : ''}` });
@@ -550,39 +580,38 @@ function renderLoggedActivities() {
 
 // Offsets investment simulator
 function setupOffsetSimulator() {
-  const offsetSlider = document.getElementById('offsetSlider');
-  const offsetTargetText = document.getElementById('offsetTargetText');
-  const offsetCostText = document.getElementById('offsetCostText');
-  
+  const offsetSlider = getCachedElement('offsetSlider');
+  const offsetTargetText = getCachedElement('offsetTargetText');
+  const offsetCostText = getCachedElement('offsetCostText');
+
   if (!offsetSlider) return;
-  
+
   offsetSlider.addEventListener('input', (e) => {
     const val = parseInt(e.target.value);
     const netFootprint = calculateBaseCarbonFootprint();
     const kgToOffset = (netFootprint * (val / 100)) * 1000;
     const costUsd = (kgToOffset / 1000) * 12;
-    
+
     offsetTargetText.textContent = `${val}% (${(kgToOffset / 1000).toFixed(2)} t CO₂e)`;
     offsetCostText.textContent = `$${costUsd.toFixed(2)}`;
   });
-  
+
   const projectsGrid = document.getElementById('offset-projects-container');
   if (!projectsGrid) return;
-  
+
   const PROJECTS = [
     { id: 'proj_reforest', name: 'Amazon Basin Reforestation', costPerTon: 15, efficiency: 'High', img: 'https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?auto=format&fit=crop&w=400&q=80', desc: 'Restore biodiverse rainforest ecosystems in Peru to absorb carbon and preserve species.' },
     { id: 'proj_wind', name: 'Rajasthan Clean Wind Power', costPerTon: 10, efficiency: 'Medium', img: 'https://images.unsplash.com/photo-1466611653911-95081537e5b7?auto=format&fit=crop&w=400&q=80', desc: 'Displace fossil-fuel grids with clean wind energy systems in Rajasthan, India.' },
     { id: 'proj_cook', name: 'Safe Water Clean Cookstoves', costPerTon: 12, efficiency: 'High', img: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=400&q=80', desc: 'Provide clean cookstoves in East Africa to reduce fuel wood usage and cut local smoke emissions.' }
   ];
-  
+
   while (projectsGrid.firstChild) {
     projectsGrid.removeChild(projectsGrid.firstChild);
   }
   const fragment = document.createDocumentFragment();
   PROJECTS.forEach(proj => {
     const card = createElementSafe('div', null, { class: 'project-card' });
-    const image = createElementSafe('div', null, { class: 'project-image' });
-    image.style.backgroundImage = `url('${sanitizeText(proj.img)}')`;
+    const image = createElementSafe('img', null, { class: 'project-image', src: sanitizeText(proj.img), alt: `Project image for ${proj.name}` });
     const content = createElementSafe('div', null, { class: 'project-content' });
     const header = createElementSafe('div', null, { class: 'project-header' });
     header.appendChild(createElementSafe('span', proj.name, { class: 'project-title' }));
@@ -599,8 +628,10 @@ function setupOffsetSimulator() {
     fragment.appendChild(card);
 
     button.addEventListener('click', () => {
-      state.offsetsPurchased += 1000;
-      state.offsetSpentUsd += proj.costPerTon;
+      dispatchState({
+        offsetsPurchased: state.offsetsPurchased + 1000,
+        offsetSpentUsd: state.offsetSpentUsd + proj.costPerTon
+      });
       logActivity(`Offset: 1 Ton via ${proj.name}`, 1000, 'offset');
       announceStatus(`Thank you for supporting climate action! You have offset 1.0 Ton of carbon through the ${proj.name} project.`);
     });
@@ -614,7 +645,7 @@ function setupLibraryControls() {
   const searchInput = document.getElementById('lib-search-input');
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
-      state.librarySearch = e.target.value.toLowerCase();
+      dispatchState({ librarySearch: e.target.value.toLowerCase() });
       renderLibraryTable();
     });
   }
@@ -645,10 +676,10 @@ function renderLibraryTable() {
   });
 
   while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
-  
+
   if (filtered.length === 0) {
     const tr = createElementSafe('tr', null);
-    const td = createElementSafe('td', 'No matching carbon emission factors found.', { colspan: '4', style: 'text-align: center; color: var(--text-dim); padding: 2rem;' });
+    const td = createElementSafe('td', 'No matching carbon emission factors found.', { colspan: '4', class: 'table-empty-cell' });
     tr.appendChild(td);
     tbody.appendChild(tr);
     return;
@@ -657,13 +688,13 @@ function renderLibraryTable() {
   const fragment = document.createDocumentFragment();
   filtered.forEach(item => {
     const tr = createElementSafe('tr', null);
-    tr.appendChild(createElementSafe('td', item.name, { style: 'font-weight:600;' }));
-    const categoryCell = createElementSafe('td', null, { style: 'width: 100px;' });
-    const categoryBadge = createElementSafe('span', item.category, { class: 'difficulty-badge difficulty-easy', style: 'background:rgba(20,184,166,0.08); color:var(--color-teal); border-color:rgba(20,184,166,0.15);' });
+    tr.appendChild(createElementSafe('td', item.name, { class: 'library-name-cell' }));
+    const categoryCell = createElementSafe('td', null, { class: 'library-category-cell' });
+    const categoryBadge = createElementSafe('span', item.category, { class: 'category-badge' });
     categoryCell.appendChild(categoryBadge);
     tr.appendChild(categoryCell);
-    tr.appendChild(createElementSafe('td', item.carbonFactor, { class: 'coef-val', style: 'width: 150px; text-align:right;' }));
-    tr.appendChild(createElementSafe('td', item.description, { style: 'color: var(--text-muted); font-size: 0.8rem; max-width: 300px;' }));
+    tr.appendChild(createElementSafe('td', item.carbonFactor, { class: 'coef-val library-value-cell' }));
+    tr.appendChild(createElementSafe('td', item.description, { class: 'library-desc-cell' }));
     fragment.appendChild(tr);
   });
   tbody.appendChild(fragment);
@@ -701,25 +732,23 @@ function calculateAndRenderScenario() {
     // Zero car petrol/diesel (acts like EV grid average: 1500kg for standard driving)
     const EVCarEmissions = state.calculator.carMiles * EMISSION_FACTORS.car.electric;
     const baseCarEmissions = state.calculator.carMiles * EMISSION_FACTORS.car[state.calculator.carFuel];
-    
+
     // Switch utility electricity to wind/solar grid (replaces standard electricity grid factor 0.38 with 0.02)
-    const SolarElectricEmissions = state.calculator.electricity * (0.02 * 12);
+    const SolarElectricEmissions = state.calculator.electricity * APP_CONSTANTS.SOLAR_GRID_FACTOR;
     const baseElectricEmissions = state.calculator.electricity * EMISSION_FACTORS.electricity;
-    
+
     proposedTons = proposedTons - (baseCarEmissions / 1000) + (EVCarEmissions / 1000) - (baseElectricEmissions / 1000) + (SolarElectricEmissions / 1000);
   } else if (state.activeScenario === 'diet') {
-    // Switches food category factor down to 0.8 tons (vegan diet baseline)
     const baseDiet = EMISSION_FACTORS.diet[state.calculator.dietType];
-    proposedTons = proposedTons - (baseDiet / 1000) + (800 / 1000);
+    proposedTons = proposedTons - (baseDiet / 1000) + (APP_CONSTANTS.SCENARIO_VEGAN_DIET_FOOTPRINT / 1000);
   } else if (state.activeScenario === 'netzero') {
-    // Ideal net-zero: vegan diet (0.8t), zero flights (0), no car (0), renewable energy grid (0.02t), minimalist waste (0.2t)
     const transit = state.calculator.publicTransit * EMISSION_FACTORS.transit;
-    proposedTons = (transit + (250 * 0.02 * 12) + 800 + 200) / 1000;
+    proposedTons = (transit + (250 * APP_CONSTANTS.SOLAR_GRID_FACTOR) + APP_CONSTANTS.MINIMALIST_DIET_FOOTPRINT + APP_CONSTANTS.MINIMALIST_WASTE_FOOTPRINT) / 1000;
   }
 
-  // Cap proposed footprint minimum at 0.3 tons
-  proposedTons = Math.max(0.3, proposedTons);
-  
+  // Cap proposed footprint minimum
+  proposedTons = Math.max(APP_CONSTANTS.SCENARIO_MIN_TONS, proposedTons);
+
   // Update UI values
   safeSetTextContent('val-scenario-base', `${baseTons.toFixed(1)} t`);
   safeSetTextContent('val-scenario-prop', `${proposedTons.toFixed(1)} t`);
@@ -734,10 +763,10 @@ function renderScenarioChart(baseVal, proposedVal) {
 
   while (container.firstChild) container.removeChild(container.firstChild);
 
-  const maxVal = Math.max(16, baseVal);
-  const chartHeight = 180;
-  const chartWidth = 320;
-  const padding = 40;
+  const maxVal = Math.max(APP_CONSTANTS.MAX_CHART_SCALE, baseVal);
+  const chartHeight = APP_CONSTANTS.CHART_HEIGHT;
+  const chartWidth = APP_CONSTANTS.CHART_WIDTH;
+  const padding = APP_CONSTANTS.CHART_PADDING;
 
   const colWidth = (chartWidth - padding * 2) / 3;
 
@@ -800,35 +829,35 @@ function renderScenarioChart(baseVal, proposedVal) {
 // Carbon Footprint Mathematics
 function calculateBaseCarbonFootprint() {
   const c = state.calculator;
-  
+
   const carEmissions = c.carMiles * EMISSION_FACTORS.car[c.carFuel];
   const flightEmissions = c.flights * EMISSION_FACTORS.flight;
   const transitEmissions = c.publicTransit * EMISSION_FACTORS.transit;
   const transportTotal = carEmissions + flightEmissions + transitEmissions;
-  
+
   const electricEmissions = c.electricity * EMISSION_FACTORS.electricity;
   const gasEmissions = c.gas * EMISSION_FACTORS.gas;
   const oilEmissions = c.oil * EMISSION_FACTORS.oil;
   const energyTotal = electricEmissions + gasEmissions + oilEmissions;
-  
+
   const dietTotal = EMISSION_FACTORS.diet[c.dietType];
-  
+
   const wasteBase = EMISSION_FACTORS.waste.shopping[c.wasteShopping];
   const recycleOffset = EMISSION_FACTORS.waste.recycle[c.wasteRecycle];
   const wasteTotal = Math.max(100, wasteBase + recycleOffset);
-  
+
   const grandTotalKg = transportTotal + energyTotal + dietTotal + wasteTotal;
   return grandTotalKg / 1000;
 }
 
 function calculateCategoryBreakdown() {
   const c = state.calculator;
-  
+
   const transport = (c.carMiles * EMISSION_FACTORS.car[c.carFuel]) + (c.flights * EMISSION_FACTORS.flight) + (c.publicTransit * EMISSION_FACTORS.transit);
   const energy = (c.electricity * EMISSION_FACTORS.electricity) + (c.gas * EMISSION_FACTORS.gas) + (c.oil * EMISSION_FACTORS.oil);
   const food = EMISSION_FACTORS.diet[c.dietType];
   const waste = Math.max(100, EMISSION_FACTORS.waste.shopping[c.wasteShopping] + EMISSION_FACTORS.waste.recycle[c.wasteRecycle]);
-  
+
   return {
     transport: transport / 1000,
     energy: energy / 1000,
@@ -837,11 +866,16 @@ function calculateCategoryBreakdown() {
   };
 }
 
-// State synchronization & overall outputs recalculation
-function updateCalculations() {
-  const baseTons = calculateBaseCarbonFootprint();
-  
-  // Pro: Checklist reductions & Financial Savings
+function safeRender(callback) {
+  try {
+    callback();
+  } catch (error) {
+    console.warn('Render error:', error);
+    announceStatus('An error occurred while updating the dashboard.');
+  }
+}
+
+function computeTotalSavings() {
   let checklistSavingsKg = 0;
   let cashSavingsUsd = 0;
   state.completedActions.forEach(actionId => {
@@ -851,91 +885,108 @@ function updateCalculations() {
       cashSavingsUsd += act.savings;
     }
   });
-  const checklistSavingsTons = checklistSavingsKg / 1000;
-  
-  // Activity logger savings
+
   let activitySavingsKg = 0;
   state.loggedActivities.forEach(entry => {
     if (entry.type === 'activity') {
       activitySavingsKg += entry.carbonSaved;
     }
   });
-  const activitySavingsTons = activitySavingsKg / 1000;
-  
-  // Offset purchases
+
   const offsetTons = state.offsetsPurchased / 1000;
-  
-  // Net emissions
-  const netEmissions = Math.max(0, baseTons - checklistSavingsTons - activitySavingsTons - offsetTons);
-  const totalSavings = checklistSavingsTons + activitySavingsTons + offsetTons;
-  
-  // Update Dashboard Text Elements
+  const checklistSavingsTons = checklistSavingsKg / 1000;
+  const activitySavingsTons = activitySavingsKg / 1000;
+
+  return {
+    totalTons: checklistSavingsTons + activitySavingsTons + offsetTons,
+    cashUsd: cashSavingsUsd,
+    checklistTons: checklistSavingsTons,
+    activityTons: activitySavingsTons,
+    offsetTons
+  };
+}
+
+function updateFootprintDisplay(baseTons, netEmissions, totalSavings) {
   safeSetTextContent('val-total-emissions', baseTons.toFixed(1));
   safeSetTextContent('val-net-emissions', netEmissions.toFixed(1));
   safeSetTextContent('val-total-savings', totalSavings.toFixed(2));
-  
-  // Update Calculator Summary View Tickers
   safeSetTextContent('val-calc-total', `${baseTons.toFixed(1)} tons`);
-  
-  // Pro: Update Financial Tickers in Action Plan
-  safeSetTextContent('val-cash-savings', `$${cashSavingsUsd.toLocaleString()}`);
+}
 
-  // Pro: Update Carbon Budget Ledger (Target is 3.0 tons)
+function updateBudgetBar(netEmissions) {
   const budgetBar = document.getElementById('val-budget-bar');
   const budgetStatusText = document.getElementById('val-budget-status');
-  if (budgetBar && budgetStatusText) {
-    const percent = Math.min(100, (netEmissions / 8.0) * 100); // 8 tons max scale
-    budgetBar.style.width = `${percent}%`;
-    
-    if (netEmissions <= 3.0) {
-      budgetBar.className = 'budget-bar-fill';
-      budgetStatusText.textContent = `${(3.0 - netEmissions).toFixed(1)} t budget remaining (Under Target)`;
-      budgetStatusText.style.color = 'var(--color-green)';
-    } else {
-      budgetBar.className = 'budget-bar-fill warning';
-      budgetStatusText.textContent = `${(netEmissions - 3.0).toFixed(1)} t over annual target budget!`;
-      budgetStatusText.style.color = 'var(--color-red)';
-    }
-  }
+  if (!budgetBar || !budgetStatusText) return;
 
-  // Update comparative stats (US Average is 15.5 tons)
-  const pctDiff = ((baseTons - 15.5) / 15.5) * 100;
+  const percent = Math.min(100, (netEmissions / APP_CONSTANTS.BUDGET_MAX_SCALE) * 100);
+  budgetBar.style.setProperty('--fill-width', `${percent}%`);
+
+  if (netEmissions <= APP_CONSTANTS.TARGET_BUDGET_TON) {
+    budgetBar.className = 'budget-bar-fill';
+    budgetStatusText.textContent = `${(APP_CONSTANTS.TARGET_BUDGET_TON - netEmissions).toFixed(1)} t budget remaining (Under Target)`;
+    budgetStatusText.classList.remove('warning');
+    budgetStatusText.classList.add('positive');
+  } else {
+    budgetBar.className = 'budget-bar-fill warning';
+    budgetStatusText.textContent = `${(netEmissions - APP_CONSTANTS.TARGET_BUDGET_TON).toFixed(1)} t over annual target budget!`;
+    budgetStatusText.classList.remove('positive');
+    budgetStatusText.classList.add('warning');
+  }
+}
+
+function updateComparativeStats(baseTons) {
+  const pctDiff = ((baseTons - APP_CONSTANTS.US_AVERAGE_TONS) / APP_CONSTANTS.US_AVERAGE_TONS) * 100;
   const compLabel = document.getElementById('comp-average-label');
   const compVal = document.getElementById('comp-average-val');
-  if (compLabel && compVal) {
-    if (pctDiff > 0) {
-      compLabel.textContent = 'ABOVE US AVERAGE';
-      compVal.textContent = `+${pctDiff.toFixed(0)}%`;
-      compVal.className = 'stat-sub negative';
-    } else {
-      compLabel.textContent = 'BELOW US AVERAGE';
-      compVal.textContent = `${pctDiff.toFixed(0)}%`;
-      compVal.className = 'stat-sub positive';
-    }
-  }
+  if (!compLabel || !compVal) return;
 
-  // Update offset summary panels
-  safeSetTextContent('offset-summary-total', offsetTons.toFixed(1));
+  if (pctDiff > 0) {
+    compLabel.textContent = 'ABOVE US AVERAGE';
+    compVal.textContent = `+${pctDiff.toFixed(0)}%`;
+    compVal.className = 'stat-sub negative';
+  } else {
+    compLabel.textContent = 'BELOW US AVERAGE';
+    compVal.textContent = `${pctDiff.toFixed(0)}%`;
+    compVal.className = 'stat-sub positive';
+  }
+}
+
+function updateCashAndOffsets(savings) {
+  safeSetTextContent('val-cash-savings', `$${savings.cashUsd.toLocaleString()}`);
+  safeSetTextContent('offset-summary-total', savings.offsetTons.toFixed(1));
   safeSetTextContent('offset-summary-spent', `$${state.offsetSpentUsd.toFixed(0)}`);
-  
-  // Update badges
-  checkAndUnlockBadges(baseTons, totalSavings);
-  
-  // Update Coach Gaia Dialogue
+}
+
+function updateNetZeroProgress(baseTons, netEmissions) {
+  const netZeroPercent = baseTons > 0 ? Math.max(0, Math.min(100, ((baseTons - netEmissions) / baseTons) * 100)) : 0;
+  safeSetTextContent('netzero-percent', `${netZeroPercent.toFixed(0)}%`);
+  const fill = document.getElementById('netzero-fill');
+  if (fill) fill.style.setProperty('--fill-width', `${netZeroPercent}%`);
+}
+
+// State synchronization & overall outputs recalculation
+function updateCalculations() {
+  const baseTons = calculateBaseCarbonFootprint();
+  const savings = computeTotalSavings();
+  const netEmissions = Math.max(0, baseTons - savings.totalTons);
+
+  updateFootprintDisplay(baseTons, netEmissions, savings.totalTons);
+  updateBudgetBar(netEmissions);
+  updateComparativeStats(baseTons);
+  updateCashAndOffsets(savings);
+  updateNetZeroProgress(baseTons, netEmissions);
+
+  checkAndUnlockBadges(baseTons, savings.totalTons);
   updateGaiaCoach(baseTons, calculateCategoryBreakdown());
-  
-  // Re-render visual elements
-  renderDashboardCharts();
-  
-  // Pro: Update scenarios presets
-  calculateAndRenderScenario();
-  
-  // Save State
+
+  safeRender(renderDashboardCharts);
+  safeRender(calculateAndRenderScenario);
+
   saveStateToLocalStorage();
 }
 
 function safeSetTextContent(id, text) {
-  const el = document.getElementById(id);
+  const el = getCachedElement(id);
   if (el) el.textContent = text;
 }
 
@@ -950,7 +1001,7 @@ function checkAndUnlockBadges(baseTons, totalSavingsTons) {
 
   let userLevel = 'Seedling';
   let activeBadgesCount = 0;
-  
+
   badges.forEach(b => {
     const el = document.getElementById(b.id);
     if (el) {
@@ -978,7 +1029,7 @@ function updateGaiaCoach(totalFootprint, breakdown) {
 
   let maxCat = 'transport';
   let maxVal = breakdown.transport;
-  
+
   if (breakdown.energy > maxVal) { maxCat = 'energy'; maxVal = breakdown.energy; }
   if (breakdown.food > maxVal) { maxCat = 'food'; maxVal = breakdown.food; }
   if (breakdown.waste > maxVal) { maxCat = 'waste'; maxVal = breakdown.waste; }
@@ -1024,14 +1075,7 @@ function updateGaiaCoach(totalFootprint, breakdown) {
   speechBubble.textContent = feedbackText;
   while (suggestionBox.firstChild) suggestionBox.removeChild(suggestionBox.firstChild);
   tips.forEach(tip => {
-    const li = createElementSafe('li', null);
-    li.style.marginBottom = '0.65rem';
-    li.style.paddingLeft = '1rem';
-    li.style.position = 'relative';
-    const bullet = createElementSafe('span', '•', { style: 'position:absolute; left:0; color:var(--color-teal);' });
-    const text = createElementSafe('span', tip);
-    li.appendChild(bullet);
-    li.appendChild(text);
+    const li = createElementSafe('li', tip, { class: 'gaia-tip-item' });
     suggestionBox.appendChild(li);
   });
 }
@@ -1039,17 +1083,17 @@ function updateGaiaCoach(totalFootprint, breakdown) {
 // Chart Rendering Logic
 function renderDashboardCharts() {
   if (state.activeView !== 'dashboard') return;
-  
+
   const baseEmissions = calculateBaseCarbonFootprint();
   const breakdown = calculateCategoryBreakdown();
-  
-  const radialCircle = document.getElementById('radial-score-circle');
+
+  const radialCircle = getCachedElement('radial-score-circle');
   if (radialCircle) {
     const circ = 314.16;
     const percent = Math.min(100, (baseEmissions / 20) * 100);
     const offset = circ - (percent / 100) * circ;
-    radialCircle.style.strokeDasharray = `${circ}`;
-    radialCircle.style.strokeDashoffset = `${offset}`;
+    radialCircle.setAttribute('stroke-dasharray', `${circ}`);
+    radialCircle.setAttribute('stroke-dashoffset', `${offset}`);
   }
 
   renderDonutChart(breakdown);
@@ -1065,7 +1109,7 @@ function renderDonutChart(breakdown) {
 
   const total = breakdown.transport + breakdown.energy + breakdown.food + breakdown.waste;
   if (total === 0) {
-    container.appendChild(createElementSafe('span', 'Complete the calculator to view breakdown.', { style: 'color:var(--text-dim)' }));
+    container.appendChild(createElementSafe('span', 'Complete the calculator to view breakdown.', { class: 'chart-notice' }));
     return;
   }
 
@@ -1115,7 +1159,7 @@ function renderDonutChart(breakdown) {
       'stroke-dasharray': circ,
       'stroke-dashoffset': strokeOffset,
       'stroke-linecap': 'round',
-      style: `transform: rotate(-90deg); transform-origin: ${center}px ${center}px; transition: stroke-dashoffset 0.8s ease-in-out;`
+      class: 'donut-segment'
     });
     svg.appendChild(circle);
     currentOffset -= strokeDash;
@@ -1201,7 +1245,7 @@ function renderComparisonChart(userVal) {
       height: barHeight,
       rx: 6,
       fill: item.color,
-      style: 'transition: y 0.8s ease-in-out, height 0.8s ease-in-out;'
+      class: 'bar-segment'
     }));
     const valueText = createSvgElementSafe('text', {
       x: x + 14,
@@ -1316,14 +1360,16 @@ function renderForecastChart(currentEmissions) {
     'stroke-width': '2',
     'stroke-dasharray': '2,2',
     opacity: '0.6',
-    points: pointsBau
+    points: pointsBau,
+    class: 'forecast-line bau-line'
   }));
 
   svg.appendChild(createSvgElementSafe('polyline', {
     fill: 'none',
     stroke: 'var(--color-green)',
     'stroke-width': '3',
-    points: pointsTarget
+    points: pointsTarget,
+    class: 'forecast-line target-line'
   }));
 
   const targetY = chartHeight - paddingY - (2.0 / maxVal) * (chartHeight - paddingY * 2);
@@ -1364,7 +1410,7 @@ function renderCommunityView() {
     if (entry.type === 'activity') totalSavingsKg += entry.carbonSaved;
   });
   totalSavingsKg += state.offsetsPurchased;
-  
+
   const userScore = totalSavingsKg;
   let currentLevel = 'Seedling';
   const unlockedBadges = document.querySelectorAll('.badge-item.unlocked').length;
@@ -1388,19 +1434,16 @@ function renderCommunityView() {
 
   combined.forEach((person, idx) => {
     const row = createElementSafe('tr', null, { class: `leaderboard-row ${person.active ? 'user-row' : ''}` });
-    const rankCell = createElementSafe('td', null, { style: 'width: 50px;' });
+    const rankCell = createElementSafe('td', null, { class: 'leaderboard-rank-cell' });
     const rankIndicator = createElementSafe('span', String(idx + 1), { class: `rank-indicator ${idx === 0 ? 'rank-1' : idx === 1 ? 'rank-2' : idx === 2 ? 'rank-3' : ''}` });
-    if (idx === 0 || idx === 1 || idx === 2) {
-      rankIndicator.textContent = String(idx + 1);
-    }
     rankCell.appendChild(rankIndicator);
     const profileCell = createElementSafe('td', null);
     const profileContainer = createElementSafe('div', null, { class: 'leaderboard-user' });
-    const avatar = createElementSafe('div', person.avatar, { class: 'leaderboard-avatar' });
-    avatar.style.background = person.active ? 'linear-gradient(135deg, var(--color-green), var(--color-teal))' : 'rgba(255,255,255,0.06)';
-    avatar.style.color = person.active ? '#0b1329' : 'var(--text-main)';
+    const avatarClass = person.active ? 'leaderboard-avatar leaderboard-avatar-active' : 'leaderboard-avatar leaderboard-avatar-passive';
+    const avatar = createElementSafe('div', person.avatar, { class: avatarClass });
     profileContainer.appendChild(avatar);
-    profileContainer.appendChild(createElementSafe('span', person.name, { style: `font-weight: ${person.active ? '700' : '500'};` }));
+    const nameClass = `leaderboard-name ${person.active ? 'leaderboard-name-active' : 'leaderboard-name-passive'}`;
+    profileContainer.appendChild(createElementSafe('span', person.name, { class: nameClass }));
     profileCell.appendChild(profileContainer);
 
     const levelCell = createElementSafe('td', null);
@@ -1435,11 +1478,13 @@ function loadStateFromLocalStorage() {
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
-      if (parsed.calculator) state.calculator = parsed.calculator;
-      if (parsed.completedActions) state.completedActions = new Set(parsed.completedActions);
-      if (parsed.loggedActivities) state.loggedActivities = parsed.loggedActivities;
-      if (parsed.offsetsPurchased !== undefined) state.offsetsPurchased = parsed.offsetsPurchased;
-      if (parsed.offsetSpentUsd !== undefined) state.offsetSpentUsd = parsed.offsetSpentUsd;
+      const nextState = { ...state };
+      if (parsed.calculator) nextState.calculator = parsed.calculator;
+      if (parsed.completedActions) nextState.completedActions = new Set(parsed.completedActions);
+      if (parsed.loggedActivities) nextState.loggedActivities = parsed.loggedActivities;
+      if (parsed.offsetsPurchased !== undefined) nextState.offsetsPurchased = parsed.offsetsPurchased;
+      if (parsed.offsetSpentUsd !== undefined) nextState.offsetSpentUsd = parsed.offsetSpentUsd;
+      dispatchState(nextState);
     } catch (e) {
       console.error('Error parsing localStorage state:', e);
     }
@@ -1449,8 +1494,22 @@ function loadStateFromLocalStorage() {
 if (typeof window !== 'undefined') {
   window.StateManager = StateManager;
   window.sanitizeText = sanitizeText;
+  window.calculateCategoryBreakdown = calculateCategoryBreakdown;
+  window.computeTotalSavings = computeTotalSavings;
+  window.updateBudgetBar = updateBudgetBar;
+  window.updateComparativeStats = updateComparativeStats;
+  window.updateNetZeroProgress = updateNetZeroProgress;
+  window.loadStateFromLocalStorage = loadStateFromLocalStorage;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { StateManager, sanitizeText };
+  module.exports = {
+    StateManager,
+    sanitizeText,
+    calculateCategoryBreakdown,
+    computeTotalSavings,
+    updateBudgetBar,
+    updateComparativeStats,
+    updateNetZeroProgress
+  };
 }
