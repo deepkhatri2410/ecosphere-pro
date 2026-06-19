@@ -9,6 +9,8 @@
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div aria-live="polite" aria-atomic="true" class="sr-only" id="aria-live-region">Application status updates will appear here.</div>
+
   <!-- Ambient glowing blobs -->
   <div class="ambient-bg">
     <div class="blob blob-1"></div>
@@ -87,8 +89,8 @@
       <!-- Top header layout -->
       <div class="header-row">
         <h1 class="page-title">Climate Command Pro</h1>
-        <div style="display:flex; gap:1rem; align-items:center;">
-          <button id="btn-export" type="button" class="btn-outline" style="padding:0.45rem 1rem; font-size:0.8rem; display:flex; align-items:center; gap:0.5rem;">
+        <div class="top-header-row">
+          <button id="btn-export" type="button" class="btn-outline export-button">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
             Export Report (PDF)
           </button>
@@ -102,10 +104,10 @@
         <!-- Score, Coach & Budget Panels -->
         <div class="dash-grid-top">
           <!-- Footprint score card -->
-          <div class="glass-card green-accent score-panel" style="flex-direction:column; align-items:stretch; gap:1.25rem;">
-            <div style="display:flex; gap:2rem; align-items:center;">
+          <div class="glass-card green-accent score-panel">
+            <div class="score-header-row">
               <div class="radial-score-container">
-                <svg viewBox="0 0 120 120" style="width: 100%; height: 100%;">
+                <svg viewBox="0 0 120 120" class="full-width-svg">
                   <defs>
                     <linearGradient id="greenTealGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                       <stop offset="0%" stop-color="var(--color-green)" />
@@ -123,24 +125,33 @@
               <div class="score-stats">
                 <div class="stat-item">
                   <span class="stat-label">Calculated Footprint</span>
-                  <span class="stat-value"><span id="val-total-emissions">--</span> <span style="font-size: 0.9rem; font-weight: 500; color: var(--text-muted);">t CO₂e</span></span>
+                  <span class="stat-value"><span id="val-total-emissions">--</span> <span class="stat-note">t CO₂e</span></span>
                 </div>
                 <div class="stat-item">
                   <span class="stat-label">Active Savings</span>
-                  <span class="stat-value" style="color: var(--color-green);"><span id="val-total-savings">--</span> <span style="font-size: 0.9rem; font-weight: 500; color: var(--color-green);">t CO₂e</span></span>
+                  <span class="stat-value text-green"><span id="val-total-savings">--</span> <span class="stat-note text-green">t CO₂e</span></span>
                 </div>
               </div>
             </div>
 
             <!-- Pro Carbon Budget Bar -->
             <div class="budget-panel-container">
-              <div style="display:flex; justify-content:space-between; font-size:0.78rem;">
-                <span style="font-weight:600;">Annual Target Budget Cap (3.0t Limit)</span>
-                <span id="val-budget-status" style="font-weight:700;">Evaluating...</span>
+              <div class="budget-header">
+                <span class="budget-header-label">Annual Target Budget Cap (3.0t Limit)</span>
+                <span id="val-budget-status" class="budget-status">Evaluating...</span>
               </div>
               <div class="budget-bar-track">
                 <div class="budget-bar-fill" id="val-budget-bar"></div>
                 <div class="budget-bar-limit"></div>
+              </div>
+              <div class="netzero-panel" aria-label="Net-zero progress">
+                <div class="netzero-header">
+                  <span>Net-zero progress</span>
+                  <span id="netzero-percent" class="netzero-percent">0%</span>
+                </div>
+                <div class="netzero-bar-track">
+                  <div id="netzero-fill" class="netzero-bar-fill"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -161,7 +172,7 @@
             <div class="gaia-speech" id="gaia-speech-bubble">
               Calculating profile details to formulate reduction paths...
             </div>
-            <ul id="gaia-suggestions-list" style="list-style: none; font-size: 0.8rem; line-height: 1.4; color: var(--text-main);">
+            <ul id="gaia-suggestions-list" class="gaia-suggestions-list">
               <!-- Rendered via JS -->
             </ul>
           </div>
@@ -176,7 +187,7 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83M22 12A10 10 0 0 0 12 2v10z"/></svg>
               Emissions Breakdown
             </h3>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 1rem;">
+            <div class="chart-breakdown-grid">
               <div class="chart-container" id="donut-chart-container">
                 <!-- SVG injected via JS -->
               </div>
@@ -219,31 +230,41 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/></svg>
               Global Benchmarks
             </h3>
+            <div class="benchmark-summary-row">
+              <div class="benchmark-block">
+                <span class="benchmark-text-muted">U.S. Average Annual Footprint</span>
+                <span class="benchmark-number accent">15.5 t CO₂e</span>
+              </div>
+              <div class="benchmark-block text-right">
+                <span id="comp-average-label" class="comparison-label" aria-live="polite">Benchmark</span>
+                <span id="comp-average-val" class="comparison-value" aria-live="polite">--</span>
+              </div>
+            </div>
             <div class="chart-container" id="comparison-chart-container">
               <!-- SVG injected via JS -->
             </div>
           </div>
 
           <!-- Net-zero forecast line -->
-          <div class="glass-card" style="grid-column: span 3;">
+          <div class="glass-card full-width-card">
             <h3 class="card-title">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
               Decade Net-Zero Forecast (2026 - 2036)
             </h3>
-            <div style="display: grid; grid-template-columns: 3fr 1fr; gap: 2rem; align-items: center;">
+            <div class="forecast-grid">
               <div class="chart-container" id="forecast-chart-container">
                 <!-- SVG line plot injected via JS -->
               </div>
-              <div style="display:flex; flex-direction:column; gap:1rem;">
-                <div style="display:flex; align-items:center; gap:0.5rem;">
-                  <span style="width:14px; height:4px; border-radius:2px; background:var(--color-green); display:inline-block"></span>
-                  <span style="font-size:0.8rem; font-weight:600;">Eco Target Path</span>
+              <div class="card-column">
+                <div class="forecast-legend-row">
+                  <span class="forecast-pill target"></span>
+                  <span class="forecast-caption">Eco Target Path</span>
                 </div>
-                <div style="display:flex; align-items:center; gap:0.5rem;">
-                  <span style="width:14px; height:4px; border-radius:2px; background:var(--color-amber); border-style:dashed; border-width:1px; display:inline-block"></span>
-                  <span style="font-size:0.8rem; color:var(--text-muted);">Business As Usual</span>
+                <div class="forecast-legend-row">
+                  <span class="forecast-pill bau"></span>
+                  <span class="forecast-caption">Business As Usual</span>
                 </div>
-                <p style="font-size:0.75rem; color:var(--text-muted); line-height:1.4;">
+                <p class="forecast-caption">
                   This curve tracks your path towards hitting the 2-ton threshold by 2030, compared to staying at your baseline habit levels.
                 </p>
               </div>
@@ -479,7 +500,7 @@
               </div>
             </div>
             
-            <div style="margin-top:2rem; display:flex; justify-content:flex-end;">
+            <div class="card-row-between mt-2rem">
               <button id="btn-go-dashboard" type="button" class="btn-primary">
                 <span>View Dashboard</span>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -489,18 +510,18 @@
 
           <!-- Right side feedback -->
           <div class="glass-card green-accent">
-            <h4 style="font-family:var(--font-title); margin-bottom:1.5rem;">Calculated Summary</h4>
-            <p style="font-size:0.85rem; color:var(--text-muted); line-height:1.5; margin-bottom:1.5rem;">
+            <h4 class="card-title mb-1-5rem">Calculated Summary</h4>
+            <p class="forecast-caption mb-1-5rem">
               Adjust sliders on the left tab groups. Changes reflect immediately on this live ticker.
             </p>
-            <div style="display:flex; flex-direction:column; gap:1.5rem;">
+            <div class="card-column-gap">
               <div class="stat-item">
                 <span class="stat-label">Estimated Annual Emissions</span>
-                <span class="stat-value" id="val-calc-total" style="font-size:2rem; font-weight:800; color:var(--color-green);">--</span>
-                <span style="font-size:0.75rem; color:var(--text-dim);">METRIC TONS OF CO₂ EQUIVALENT</span>
+                <span class="stat-value large text-green" id="val-calc-total">--</span>
+                <span class="forecast-caption">METRIC TONS OF CO₂ EQUIVALENT</span>
               </div>
-              <div style="height:1px; background:var(--border-glass);"></div>
-              <p style="font-size:0.8rem; color:var(--text-muted); line-height:1.4;">
+              <div class="border-divider"></div>
+              <p class="forecast-caption">
                 This estimate calculates fossil fuel derivatives, methane emissions from animal agriculture, and carbon outputs from product manufacturing life cycles.
               </p>
             </div>
@@ -511,18 +532,18 @@
       <!-- VIEW 3: ACTION PLAN -->
       <section id="actionplan-view" class="view-section">
         <!-- Pro Layout Split: Checklist on Left, Scenario Preset and Chart on Right -->
-        <div class="calc-layout" style="grid-template-columns: 1.4fr 0.9fr;">
+        <div class="calc-layout calc-layout-tight">
           
           <!-- Checklist -->
           <div class="glass-card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem;">
-              <h3 class="card-title" style="margin-bottom:0;">
+            <div class="card-row-between mb-1-25rem">
+              <h3 class="card-title no-margin">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3"/></svg>
                 Decarbonization Roadmap
               </h3>
-              <div style="text-align:right;">
-                <span style="font-size:0.75rem; color:var(--text-muted); display:block;">Estimated Cash Savings</span>
-                <span id="val-cash-savings" style="font-size:1.1rem; font-weight:800; color:var(--color-green);">+$0/yr</span>
+              <div class="text-right">
+                <span class="forecast-caption">Estimated Cash Savings</span>
+                <span class="benchmark-number text-green" id="val-cash-savings">+$0/yr</span>
               </div>
             </div>
             
@@ -540,12 +561,12 @@
           </div>
 
           <!-- What-If Lifestyle Presets & Graph -->
-          <div class="glass-card purple-accent" style="display:flex; flex-direction:column; gap:1.25rem;">
-            <h3 class="card-title" style="margin-bottom:0;">
+          <div class="glass-card purple-accent card-column">
+            <h3 class="card-title no-margin">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/></svg>
               "What-If" Scenario Simulator
             </h3>
-            <p style="font-size:0.8rem; color:var(--text-muted); line-height:1.4;">
+            <p class="forecast-caption mb-1-5rem">
               Model alternative lifestyle futures. Tap a preset to overlay emissions projections against target goals.
             </p>
             
@@ -563,7 +584,7 @@
                 <span class="scenario-preset-desc">Vegan lifestyle</span>
               </div>
             </div>
-            <div class="scenario-presets-container" style="margin-top:-0.5rem; justify-content:center; grid-template-columns:1fr;">
+            <div class="scenario-presets-container scenario-presets-compact">
               <div class="scenario-preset-card" data-scenario="netzero">
                 <span class="scenario-preset-title">Eco Utopia (Net-Zero Dream)</span>
                 <span class="scenario-preset-desc">Vegan diet + no flight + mass transit + clean solar grid</span>
@@ -571,19 +592,19 @@
             </div>
 
             <!-- Comparison details -->
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; padding:0.5rem; background:rgba(255,255,255,0.01); border-radius:10px; border:1px solid var(--border-glass)">
-              <div style="text-align:center;">
-                <span style="font-size:0.7rem; color:var(--text-muted); display:block;">Calculated Base</span>
-                <span id="val-scenario-base" style="font-weight:700; font-size:1.1rem; color:var(--color-amber);">--</span>
+            <div class="overlay-panel summary-grid">
+              <div class="text-center">
+                <span class="forecast-caption">Calculated Base</span>
+                <span class="benchmark-number accent" id="val-scenario-base">--</span>
               </div>
-              <div style="text-align:center;">
-                <span style="font-size:0.7rem; color:var(--text-muted); display:block;">Proposed Preset</span>
-                <span id="val-scenario-prop" style="font-weight:700; font-size:1.1rem; color:var(--color-teal);">--</span>
+              <div class="text-center">
+                <span class="forecast-caption">Proposed Preset</span>
+                <span class="benchmark-number" id="val-scenario-prop">--</span>
               </div>
             </div>
 
             <!-- SVG Scenario Plot -->
-            <div class="chart-container" id="scenario-chart-container" style="height:150px;">
+            <div class="chart-container" id="scenario-chart-container">
               <!-- Dynamic SVG bars drawn via JS -->
             </div>
           </div>
@@ -599,7 +620,7 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6V2M12 22v-4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
               Gold-Standard Offset Projects
             </h3>
-            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1.5rem; line-height:1.5;">
+            <p class="forecast-caption mb-1-5rem">
               Invest in verified reforestation, renewable energy grid displace, and clean cookstove programs. Each ton purchased reduces your net emissions.
             </p>
             
@@ -609,7 +630,7 @@
           </div>
 
           <!-- Purchase Calculator Slider -->
-          <div class="glass-card amber-accent" style="display:flex; flex-direction:column; gap:1.5rem;">
+          <div class="glass-card amber-accent card-column">
             <h3 class="card-title">Offset Planner</h3>
             
             <div class="form-group">
@@ -620,24 +641,24 @@
               <input type="range" class="eco-slider" id="offsetSlider" min="0" max="100" value="0">
             </div>
 
-            <div class="stat-item" style="margin: 0.5rem 0;">
+            <div class="stat-item mb-1rem">
               <span class="stat-label">Estimated Offset Investment Cost</span>
-              <span class="stat-value" id="offsetCostText" style="font-size:2rem; font-weight:800; color:var(--color-amber);">$0.00</span>
-              <span style="font-size:0.7rem; color:var(--text-dim);">CALCULATED AT AN AVERAGE OF $12/TON CO₂e</span>
+              <span class="stat-value large text-amber" id="offsetCostText">$0.00</span>
+              <span class="forecast-caption">CALCULATED AT AN AVERAGE OF $12/TON CO₂e</span>
             </div>
 
-            <div style="height:1px; background:var(--border-glass)"></div>
+            <div class="border-divider"></div>
 
             <div>
-              <h4 style="font-size:0.9rem; margin-bottom:0.75rem; font-family:var(--font-title)">Portfolio Summary</h4>
-              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
-                <div style="padding:0.75rem; background:rgba(255,255,255,0.02); border-radius:10px; border: 1px solid var(--border-glass)">
-                  <span style="font-size:0.7rem; color:var(--text-muted); display:block; margin-bottom:0.25rem;">TOTAL OFFSET BY YOU</span>
-                  <span style="font-weight:700; font-size:1.1rem; color:var(--color-purple);" id="offset-summary-total">0.0</span> <span style="font-size:0.75rem; color:var(--text-muted);">Tons</span>
+              <h4 class="card-title mb-0-75rem">Portfolio Summary</h4>
+              <div class="grid-two-col">
+                <div class="overlay-panel">
+                  <span class="forecast-caption">TOTAL OFFSET BY YOU</span>
+                  <span class="benchmark-number accent" id="offset-summary-total">0.0</span> <span class="forecast-caption">Tons</span>
                 </div>
-                <div style="padding:0.75rem; background:rgba(255,255,255,0.02); border-radius:10px; border: 1px solid var(--border-glass)">
-                  <span style="font-size:0.7rem; color:var(--text-muted); display:block; margin-bottom:0.25rem;">TOTAL INVESTED</span>
-                  <span style="font-weight:700; font-size:1.1rem; color:var(--text-main);" id="offset-summary-spent">$0</span>
+                <div class="overlay-panel">
+                  <span class="forecast-caption">TOTAL INVESTED</span>
+                  <span class="benchmark-number" id="offset-summary-spent">$0</span>
                 </div>
               </div>
             </div>
@@ -654,17 +675,17 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               Carbon Reducers Leaderboard
             </h3>
-            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1.5rem; line-height:1.4;">
+            <p class="forecast-caption mb-1-5rem">
               Compare your cumulative emissions savings (logged actions + purchased offsets) with friends and regional climate warriors.
             </p>
-            <div style="overflow-x: auto;">
+            <div class="overflow-x-auto">
               <table class="leaderboard-table">
                 <thead>
                   <tr>
-                    <th>Rank</th>
-                    <th>User Profile</th>
-                    <th>Level Rank</th>
-                    <th>Annual Offset Savings</th>
+                    <th scope="col">Rank</th>
+                    <th scope="col">User Profile</th>
+                    <th scope="col">Level Rank</th>
+                    <th scope="col">Annual Offset Savings</th>
                   </tr>
                 </thead>
                 <tbody id="leaderboard-body">
@@ -680,18 +701,18 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
               Daily Eco Activity Log
             </h3>
-            <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:1.25rem;">
+            <p class="forecast-caption mb-1-25rem">
               Click below to record sustainable lifestyle achievements as you complete them today.
             </p>
             
-            <div class="log-layout" style="grid-template-columns: 1fr; gap:1.25rem;">
+            <div class="log-layout grid-one-col">
               <div class="activity-options" id="log-options-grid">
                 <!-- Rendered via JS -->
               </div>
               
-              <div style="height:1px; background:var(--border-glass); margin:0.5rem 0;"></div>
+              <div class="border-divider spacing-vertical"></div>
               
-              <h4 style="font-size:0.9rem; margin-bottom:0.75rem; font-family:var(--font-title)">Recent Achievements</h4>
+              <h4 class="card-title mb-0-75rem">Recent Achievements</h4>
               <div class="recent-logs-list" id="logged-actions-list">
                 <!-- Rendered via JS -->
               </div>
@@ -707,7 +728,7 @@
         <div class="learn-grid">
           <!-- Article 1 -->
           <div class="glass-card article-card">
-            <div class="article-image" style="background-image: url('https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=400&q=80')"></div>
+            <img class="article-image" src="https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=400&q=80" alt="Reforestation project scene">
             <span class="article-tag">Climate Literacy</span>
             <h4 class="article-title">Understanding Carbon Offsets</h4>
             <p class="article-desc">
@@ -721,7 +742,7 @@
 
           <!-- Article 2 -->
           <div class="glass-card article-card">
-            <div class="article-image" style="background-image: url('https://images.unsplash.com/photo-1466611653911-95081537e5b7?auto=format&fit=crop&w=400&q=80')"></div>
+            <img class="article-image" src="https://images.unsplash.com/photo-1466611653911-95081537e5b7?auto=format&fit=crop&w=400&q=80" alt="Smart home energy upgrade illustration">
             <span class="article-tag">Home Efficiency</span>
             <h4 class="article-title">Top 5 Smart Home Upgrades</h4>
             <p class="article-desc">
@@ -735,7 +756,7 @@
 
           <!-- Article 3 -->
           <div class="glass-card article-card">
-            <div class="article-image" style="background-image: url('https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=400&q=80')"></div>
+            <img class="article-image" src="https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=400&q=80" alt="Local produce market scene">
             <span class="article-tag">Dietary Impacts</span>
             <h4 class="article-title">The Science of Food Miles</h4>
             <p class="article-desc">
@@ -749,12 +770,12 @@
         </div>
 
         <!-- Pro Feature: Searchable Emission Factor Database -->
-        <div class="glass-card" style="margin-top:2.5rem;">
+        <div class="glass-card mt-2-5rem">
           <h3 class="card-title">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 22s1-1 1-4v-9a9 9 0 0 1 18 0v9c0 3 1 4 1 4H2z"/><path d="M12 2v2M12 18h.01"/></svg>
             Emission Factor Scientific Reference
           </h3>
-          <p style="font-size:0.88rem; color:var(--text-muted); margin-bottom:1.5rem; line-height:1.5;">
+          <p class="forecast-caption mb-1-5rem">
             Browse carbon footprints for common raw foods, transit types, and home heating utilities. Values represent average lifecycle kilograms of CO₂ equivalent (kg CO₂e) per standard unit of output.
           </p>
 
@@ -774,10 +795,10 @@
             <table class="library-table">
               <thead>
                 <tr>
-                  <th>Resource Item</th>
-                  <th>Category</th>
-                  <th style="text-align:right;">Carbon Coefficient</th>
-                  <th>Environmental Impact Context</th>
+                  <th scope="col">Resource Item</th>
+                  <th scope="col">Category</th>
+                  <th scope="col" class="text-right">Carbon Coefficient</th>
+                  <th scope="col">Environmental Impact Context</th>
                 </tr>
               </thead>
               <tbody id="library-table-body">
