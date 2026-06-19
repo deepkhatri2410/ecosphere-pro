@@ -1,0 +1,13 @@
+{
+  "name": "ecosphere-pro",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EcoSphere Pro frontend SPA with accessibility, security, and performance improvements.",
+  "scripts": {
+    "test": "jest"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "jsdom": "^22.0.0"
+  }
+}
