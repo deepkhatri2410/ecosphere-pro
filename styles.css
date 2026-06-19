@@ -3,10 +3,10 @@
 :root {
   /* Colors */
   --bg-dark: hsl(222, 47%, 5%);
-  --bg-card: rgba(15, 23, 42, 0.45);
-  --bg-card-hover: rgba(30, 41, 59, 0.6);
-  --border-glass: rgba(255, 255, 255, 0.08);
-  --border-glow: rgba(16, 185, 129, 0.3);
+  --bg-card: rgba(15, 23, 42, 0.75);
+  --bg-card-hover: rgba(30, 41, 59, 0.75);
+  --border-glass: rgba(255, 255, 255, 0.14);
+  --border-glow: rgba(16, 185, 129, 0.4);
   
   --color-green: hsl(142, 72%, 45%);
   --color-green-glow: rgba(16, 185, 129, 0.25);
@@ -20,8 +20,9 @@
   --color-red-glow: rgba(239, 68, 68, 0.25);
   
   --text-main: hsl(210, 40%, 98%);
-  --text-muted: hsl(215, 20%, 65%);
-  --text-dim: hsl(215, 16%, 47%);
+  --text-muted: hsl(215, 25%, 80%);
+  --text-dim: hsl(215, 25%, 70%);
+  --bg-card-strong: rgba(10, 15, 30, 0.85);
   
   /* Fonts */
   --font-title: 'Outfit', sans-serif;
@@ -47,6 +48,30 @@ body {
   overflow-x: hidden;
   min-height: 100vh;
   display: flex;
+}
+
+.skip-link {
+  position: absolute;
+  top: -52px;
+  left: 0;
+  background: var(--color-green);
+  color: #0b1329;
+  padding: 0.75rem 1rem;
+  z-index: 1100;
+  font-weight: 700;
+  text-decoration: none;
+  border-bottom-right-radius: 10px;
+  border-bottom-left-radius: 6px;
+  transition: top 0.25s ease;
+}
+
+.skip-link:focus-visible {
+  top: 0;
+}
+
+*:focus-visible {
+  outline: 3px solid var(--color-green);
+  outline-offset: 3px;
 }
 
 ::-webkit-scrollbar {
@@ -169,6 +194,7 @@ aside.sidebar {
   letter-spacing: -0.5px;
   background: linear-gradient(to right, var(--text-main), var(--color-teal));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -193,6 +219,39 @@ aside.sidebar {
   cursor: pointer;
   transition: var(--transition-fast);
   border: 1px solid transparent;
+}
+
+.tab-calc {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  color: var(--text-main);
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.tab-calc:hover,
+.tab-calc:focus-visible {
+  outline: none;
+  border-color: rgba(16, 185, 129, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tab-calc.active {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.6);
+}
+
+.radio-card-option {
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.radio-card-option:focus-within .radio-card-content,
+.radio-card-option:hover .radio-card-content {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.16);
 }
 
 .nav-item:hover {
@@ -602,6 +661,7 @@ main.main-content {
 /* Sliders */
 input[type="range"].eco-slider {
   -webkit-appearance: none;
+  appearance: none;
   width: 100%;
   height: 6px;
   background: rgba(255,255,255,0.08);
