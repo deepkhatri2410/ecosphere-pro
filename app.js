@@ -1,7 +1,3 @@
-/**
- * EcoSphere Pro - App logic & calculations
- */
-
 // Global State
 const state = {
   // Calculator inputs
@@ -68,6 +64,117 @@ const EMISSION_FACTORS = {
   }
 };
 
+const APP_CONSTANTS = {
+  TARGET_BUDGET_TON: 3.0,
+  MAX_SCALE_TON: 20,
+  OFFSET_COST_PER_TON_USD: 12,
+  MAX_LOGGED_ACTIVITIES: 20
+};
+
+let animationFrameId = null;
+
+class StateManager {
+  constructor(initialState) {
+    this._state = initialState;
+    this._listeners = [];
+    this._isDispatching = false;
+  }
+
+  get state() {
+    return this._state;
+  }
+
+  dispatch(updater) {
+    if (this._isDispatching) {
+      console.warn('State dispatch already in progress');
+      return;
+    }
+    this._isDispatching = true;
+    try {
+      const nextState = typeof updater === 'function' ? updater(this._state) : updater;
+      if (nextState && nextState !== this._state) {
+        this._state = { ...this._state, ...nextState };
+        this._notifyListeners();
+      }
+    } finally {
+      this._isDispatching = false;
+    }
+  }
+
+  subscribe(listener) {
+    this._listeners.push(listener);
+    return () => {
+      this._listeners = this._listeners.filter(l => l !== listener);
+    };
+  }
+
+  getState() {
+    return this._state;
+  }
+
+  _notifyListeners() {
+    this._listeners.forEach(listener => {
+      try {
+        listener(this._state);
+      } catch (error) {
+        console.error('Error in state listener', error);
+      }
+    });
+  }
+}
+
+const stateManager = new StateManager(state);
+stateManager.subscribe(() => {
+  requestUpdate();
+});
+
+function sanitizeText(value) {
+  if (value === undefined || value === null) return '';
+  return String(value)
+    .replace(/</g, '')
+    .replace(/>/g, '');
+}
+
+function createElementSafe(tag, text, attributes = {}) {
+  const element = document.createElement(tag);
+  if (text !== undefined && text !== null) {
+    element.textContent = sanitizeText(text);
+  }
+  Object.entries(attributes).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      element.setAttribute(key, String(value));
+    }
+  });
+  return element;
+}
+
+function createSvgElementSafe(tag, attributes = {}) {
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const element = document.createElementNS(svgNs, tag);
+  Object.entries(attributes).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      element.setAttribute(key, String(value));
+    }
+  });
+  return element;
+}
+
+function announceStatus(message) {
+  const liveRegion = document.getElementById('aria-live-region');
+  if (!liveRegion) return;
+  liveRegion.textContent = sanitizeText(message);
+}
+
+function requestUpdate() {
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+  }
+  animationFrameId = requestAnimationFrame(() => {
+    updateCalculations();
+    animationFrameId = null;
+  });
+}
+
 // Pro Checklist Actions (Adding Difficulty, Cost tags, upfront Investment, and Annual Savings)
 const CHECKLIST_ACTIONS = [
   { id: 'act_led', name: 'Switch to 100% LED Lightbulbs', impact: 250, category: 'energy', difficulty: 'easy', cost: '$', investment: 30, savings: 120 },
@@ -121,6 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadStateFromLocalStorage();
   setupNavigation();
   setupCalculatorControls();
+  setupCalcTabs();
   setupActionChecklist();
   setupLogActivities();
   setupOffsetSimulator();
@@ -128,6 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Pro setups
   setupLibraryControls();
   setupScenarioPresets();
+  setupArticleLinks();
   
   // Set current date UI
   const dateIndicator = document.getElementById('current-date-element');
@@ -135,10 +244,60 @@ document.addEventListener('DOMContentLoaded', () => {
     const d = new Date();
     dateIndicator.textContent = `Carbon Ledger: ${d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`;
   }
+
+  const dashboardButton = document.getElementById('btn-go-dashboard');
+  if (dashboardButton) {
+    dashboardButton.addEventListener('click', () => switchView('dashboard'));
+  }
+
+  const exportButton = document.getElementById('btn-export');
+  if (exportButton) {
+    exportButton.addEventListener('click', () => {
+      window.print();
+    });
+  }
   
   // Perform initial calculations & rendering
   updateCalculations();
 });
+
+function setupArticleLinks() {
+  document.querySelectorAll('.article-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const articleKey = link.getAttribute('data-article');
+      announceStatus(`Opening article: ${articleKey}`);
+    });
+  });
+}
+
+function setupCalcTabs() {
+  const tabs = document.querySelectorAll('.tab-calc');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      switchCalcTab(tab.getAttribute('data-tab-target'));
+    });
+    tab.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        tab.click();
+      }
+    });
+  });
+}
+
+function switchCalcTab(tabId) {
+  const tabs = document.querySelectorAll('.tab-calc');
+  tabs.forEach(tab => {
+    const active = tab.getAttribute('data-tab-target') === tabId;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+
+  document.querySelectorAll('.calc-step').forEach(step => {
+    step.classList.toggle('active', step.id === tabId);
+  });
+}
 
 // Navigation View Swapping
 function setupNavigation() {
@@ -197,15 +356,20 @@ function setupCalculatorControls() {
   sliders.forEach(sliderConfig => {
     const el = document.getElementById(sliderConfig.id);
     const out = document.getElementById(sliderConfig.outputId);
-    if (el) {
+    if (el && out) {
       el.value = state.calculator[sliderConfig.stateKey];
       out.textContent = formatValueWithUnits(sliderConfig.id, el.value);
 
       el.addEventListener('input', (e) => {
-        const val = parseInt(e.target.value);
-        state.calculator[sliderConfig.stateKey] = val;
+        const val = Number(e.target.value);
+        stateManager.dispatch(prev => ({
+          ...prev,
+          calculator: {
+            ...prev.calculator,
+            [sliderConfig.stateKey]: val
+          }
+        }));
         out.textContent = formatValueWithUnits(sliderConfig.id, val);
-        updateCalculations();
       });
     }
   });
@@ -247,63 +411,61 @@ function setupActionChecklist() {
   const listContainer = document.getElementById('action-plan-checklist');
   if (!listContainer) return;
   
-  listContainer.innerHTML = '';
+  while (listContainer.firstChild) {
+    listContainer.removeChild(listContainer.firstChild);
+  }
+  const fragment = document.createDocumentFragment();
   
   CHECKLIST_ACTIONS.forEach(action => {
     const isChecked = state.completedActions.has(action.id);
-    const card = document.createElement('div');
-    card.className = `pro-action-card ${isChecked ? 'completed' : ''}`;
-    card.id = `card-${action.id}`;
-    
-    // Payback calculation text
-    let paybackText = 'N/A';
-    if (action.investment > 0 && action.savings > 0) {
-      const years = action.investment / action.savings;
-      paybackText = years < 1 ? `${(years * 12).toFixed(0)} mos` : `${years.toFixed(1)} yrs`;
-    } else if (action.investment === 0 && action.savings > 0) {
-      paybackText = 'Instant';
-    }
-    
-    card.innerHTML = `
-      <div class="action-row-left">
-        <label class="checkbox-wrapper">
-          <input type="checkbox" id="chk-${action.id}" ${isChecked ? 'checked' : ''}>
-          <span class="checkbox-custom"></span>
-        </label>
-        <div class="action-details">
-          <span class="action-name ${isChecked ? 'completed' : ''}" id="lbl-${action.id}">${action.name}</span>
-          <span class="action-impact">Impact: -${(action.impact / 1000).toFixed(2)} t CO₂e/yr</span>
-        </div>
-      </div>
-      <div>
-        <span class="difficulty-badge difficulty-${action.difficulty}">${action.difficulty}</span>
-      </div>
-      <div>
-        <span class="cost-tag">${action.cost}</span>
-        <span style="font-size:0.68rem; color:var(--text-dim); display:block; margin-top:2px;">Est: $${action.investment}</span>
-      </div>
-      <div>
-        <span class="savings-tag">+$${action.savings}/yr</span>
-        <span style="font-size:0.68rem; color:var(--text-dim); display:block; margin-top:2px;">Payback: ${paybackText}</span>
-      </div>
-    `;
-    
-    listContainer.appendChild(card);
-    
-    const checkbox = card.querySelector(`#chk-${action.id}`);
+    const card = createElementSafe('div', null, { class: `pro-action-card ${isChecked ? 'completed' : ''}`, id: `card-${action.id}` });
+
+    const rowLeft = createElementSafe('div', null, { class: 'action-row-left' });
+    const checkboxWrapper = createElementSafe('label', null, { class: 'checkbox-wrapper' });
+    const checkbox = createElementSafe('input', null, { type: 'checkbox', id: `chk-${action.id}`, ...(isChecked ? { checked: 'checked' } : {}) });
+    const checkboxCustom = createElementSafe('span', null, { class: 'checkbox-custom' });
+    const actionDetails = createElementSafe('div', null, { class: 'action-details' });
+    const actionName = createElementSafe('span', action.name, { class: `action-name ${isChecked ? 'completed' : ''}`, id: `lbl-${action.id}` });
+    const actionImpact = createElementSafe('span', `Impact: -${(action.impact / 1000).toFixed(2)} t CO₂e/yr`, { class: 'action-impact' });
+
+    checkboxWrapper.appendChild(checkbox);
+    checkboxWrapper.appendChild(checkboxCustom);
+    actionDetails.appendChild(actionName);
+    actionDetails.appendChild(actionImpact);
+    rowLeft.appendChild(checkboxWrapper);
+    rowLeft.appendChild(actionDetails);
+
+    const difficultyBadge = createElementSafe('span', action.difficulty, { class: `difficulty-badge difficulty-${action.difficulty}` });
+    const costLabel = createElementSafe('div', null);
+    costLabel.appendChild(createElementSafe('span', action.cost, { class: 'cost-tag' }));
+    costLabel.appendChild(createElementSafe('span', `Est: $${action.investment}`, { style: 'font-size:0.68rem; color:var(--text-dim); display:block; margin-top:2px;' }));
+
+    const paybackText = action.investment && action.savings ? `${(action.investment / action.savings).toFixed(1)} yrs` : 'Immediate';
+    const savingsLabel = createElementSafe('div', null);
+    savingsLabel.appendChild(createElementSafe('span', `+$${action.savings}/yr`, { class: 'savings-tag' }));
+    savingsLabel.appendChild(createElementSafe('span', `Payback: ${paybackText}`, { style: 'font-size:0.68rem; color:var(--text-dim); display:block; margin-top:2px;' }));
+
+    card.appendChild(rowLeft);
+    card.appendChild(difficultyBadge);
+    card.appendChild(costLabel);
+    card.appendChild(savingsLabel);
+
+    fragment.appendChild(card);
+
     checkbox.addEventListener('change', (e) => {
       if (e.target.checked) {
         state.completedActions.add(action.id);
         card.classList.add('completed');
-        card.querySelector(`#lbl-${action.id}`).classList.add('completed');
+        actionName.classList.add('completed');
       } else {
         state.completedActions.delete(action.id);
         card.classList.remove('completed');
-        card.querySelector(`#lbl-${action.id}`).classList.remove('completed');
+        actionName.classList.remove('completed');
       }
-      updateCalculations();
+      requestUpdate();
     });
   });
+  listContainer.appendChild(fragment);
 }
 
 // Activity Logging logic
@@ -311,78 +473,79 @@ function setupLogActivities() {
   const optionsContainer = document.getElementById('log-options-grid');
   if (!optionsContainer) return;
   
-  optionsContainer.innerHTML = '';
+  while (optionsContainer.firstChild) {
+    optionsContainer.removeChild(optionsContainer.firstChild);
+  }
+  const fragment = document.createDocumentFragment();
   
   LOGGABLE_ACTIVITIES.forEach(act => {
-    const card = document.createElement('div');
-    card.className = 'activity-option-card';
-    card.innerHTML = `
-      <div class="activity-icon-text">
-        <span class="activity-badge-emoji">${act.emoji}</span>
-        <div class="activity-name-sub">
-          <span class="activity-display-name">${act.name}</span>
-          <span class="activity-display-saving">-${act.saving.toFixed(1)} kg CO₂e</span>
-        </div>
-      </div>
-      <button class="btn-log-action" id="btn-log-${act.id}">Log</button>
-    `;
-    optionsContainer.appendChild(card);
-    
-    card.querySelector(`#btn-log-${act.id}`).addEventListener('click', () => {
+    const card = createElementSafe('div', null, { class: 'activity-option-card' });
+    const iconText = createElementSafe('div', null, { class: 'activity-icon-text' });
+    iconText.appendChild(createElementSafe('span', act.emoji, { class: 'activity-badge-emoji' }));
+    const nameSub = createElementSafe('div', null, { class: 'activity-name-sub' });
+    nameSub.appendChild(createElementSafe('span', act.name, { class: 'activity-display-name' }));
+    nameSub.appendChild(createElementSafe('span', `-${act.saving.toFixed(1)} kg CO₂e`, { class: 'activity-display-saving' }));
+    iconText.appendChild(nameSub);
+
+    const logButton = createElementSafe('button', 'Log', { class: 'btn-log-action', type: 'button', id: `btn-log-${act.id}` });
+    logButton.addEventListener('click', () => {
       logActivity(act.name, act.saving, 'activity');
     });
+
+    card.appendChild(iconText);
+    card.appendChild(logButton);
+    fragment.appendChild(card);
   });
   
+  optionsContainer.appendChild(fragment);
   renderLoggedActivities();
 }
 
 function logActivity(title, kgSaved, type) {
   const newLog = {
     id: 'log_' + Date.now(),
-    title: title,
-    carbonSaved: kgSaved,
-    type: type,
+    title: sanitizeText(title),
+    carbonSaved: Number(kgSaved),
+    type: sanitizeText(type),
     timestamp: new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   };
   
   state.loggedActivities.unshift(newLog);
-  if (state.loggedActivities.length > 20) {
+  if (state.loggedActivities.length > APP_CONSTANTS.MAX_LOGGED_ACTIVITIES) {
     state.loggedActivities.pop();
   }
   
   saveStateToLocalStorage();
   renderLoggedActivities();
-  updateCalculations();
+  requestUpdate();
 }
 
 function renderLoggedActivities() {
   const list = document.getElementById('logged-actions-list');
   if (!list) return;
   
+  while (list.firstChild) list.removeChild(list.firstChild);
+  
   if (state.loggedActivities.length === 0) {
-    list.innerHTML = `
-      <div class="empty-log-state">
-        <span class="empty-log-icon">🌿</span>
-        <strong>No activities logged yet</strong>
-        <span>Log daily green steps or purchase offsets to build carbon reduction credits!</span>
-      </div>
-    `;
+    const emptyCard = createElementSafe('div', null, { class: 'empty-log-state' });
+    emptyCard.appendChild(createElementSafe('span', '🌿', { class: 'empty-log-icon' }));
+    emptyCard.appendChild(createElementSafe('strong', 'No activities logged yet'));
+    emptyCard.appendChild(createElementSafe('span', 'Log daily green steps or purchase offsets to build carbon reduction credits!'));
+    list.appendChild(emptyCard);
     return;
   }
   
-  list.innerHTML = '';
+  const fragment = document.createDocumentFragment();
   state.loggedActivities.forEach(entry => {
-    const row = document.createElement('div');
-    row.className = `log-entry-row ${entry.type === 'offset' ? 'offset-type' : ''}`;
-    row.innerHTML = `
-      <div class="log-info">
-        <span class="log-title">${entry.title}</span>
-        <span class="log-date">${entry.timestamp}</span>
-      </div>
-      <span class="log-saving">-${entry.carbonSaved.toFixed(1)} kg CO₂</span>
-    `;
-    list.appendChild(row);
+    const row = createElementSafe('div', null, { class: `log-entry-row ${entry.type === 'offset' ? 'offset-type' : ''}` });
+    const info = createElementSafe('div', null, { class: 'log-info' });
+    info.appendChild(createElementSafe('span', entry.title, { class: 'log-title' }));
+    info.appendChild(createElementSafe('span', entry.timestamp, { class: 'log-date' }));
+    row.appendChild(info);
+    row.appendChild(createElementSafe('span', `-${entry.carbonSaved.toFixed(1)} kg CO₂`, { class: 'log-saving' }));
+    fragment.appendChild(row);
   });
+  list.appendChild(fragment);
 }
 
 // Offsets investment simulator
@@ -412,35 +575,39 @@ function setupOffsetSimulator() {
     { id: 'proj_cook', name: 'Safe Water Clean Cookstoves', costPerTon: 12, efficiency: 'High', img: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=400&q=80', desc: 'Provide clean cookstoves in East Africa to reduce fuel wood usage and cut local smoke emissions.' }
   ];
   
-  projectsGrid.innerHTML = '';
+  while (projectsGrid.firstChild) {
+    projectsGrid.removeChild(projectsGrid.firstChild);
+  }
+  const fragment = document.createDocumentFragment();
   PROJECTS.forEach(proj => {
-    const card = document.createElement('div');
-    card.className = 'project-card';
-    card.innerHTML = `
-      <div class="project-image" style="background-image: url('${proj.img}')"></div>
-      <div class="project-content">
-        <div class="project-header">
-          <span class="project-title">${proj.name}</span>
-          <span class="project-price">$${proj.costPerTon}/ton</span>
-        </div>
-        <p class="project-desc">${proj.desc}</p>
-        <div class="project-footer">
-          <span class="project-efficiency">Co-Benefits: ${proj.efficiency}</span>
-          <button class="btn-buy-offset" data-id="${proj.id}">Invest 1 Ton</button>
-        </div>
-      </div>
-    `;
-    projectsGrid.appendChild(card);
-    
-    card.querySelector(`[data-id="${proj.id}"]`).addEventListener('click', () => {
+    const card = createElementSafe('div', null, { class: 'project-card' });
+    const image = createElementSafe('div', null, { class: 'project-image' });
+    image.style.backgroundImage = `url('${sanitizeText(proj.img)}')`;
+    const content = createElementSafe('div', null, { class: 'project-content' });
+    const header = createElementSafe('div', null, { class: 'project-header' });
+    header.appendChild(createElementSafe('span', proj.name, { class: 'project-title' }));
+    header.appendChild(createElementSafe('span', `$${proj.costPerTon}/ton`, { class: 'project-price' }));
+    content.appendChild(header);
+    content.appendChild(createElementSafe('p', proj.desc, { class: 'project-desc' }));
+    const footer = createElementSafe('div', null, { class: 'project-footer' });
+    footer.appendChild(createElementSafe('span', `Co-Benefits: ${proj.efficiency}`, { class: 'project-efficiency' }));
+    const button = createElementSafe('button', 'Invest 1 Ton', { class: 'btn-buy-offset', type: 'button', 'data-id': proj.id });
+    footer.appendChild(button);
+    content.appendChild(footer);
+    card.appendChild(image);
+    card.appendChild(content);
+    fragment.appendChild(card);
+
+    button.addEventListener('click', () => {
       state.offsetsPurchased += 1000;
       state.offsetSpentUsd += proj.costPerTon;
-      
       logActivity(`Offset: 1 Ton via ${proj.name}`, 1000, 'offset');
-      alert(`Thank you for supporting climate action! You have offset 1.0 Ton of carbon through the "${proj.name}" project.`);
+      announceStatus(`Thank you for supporting climate action! You have offset 1.0 Ton of carbon through the ${proj.name} project.`);
     });
   });
+  projectsGrid.appendChild(fragment);
 }
+
 
 // Pro: Setup searchable carbon database library
 function setupLibraryControls() {
@@ -457,7 +624,10 @@ function setupLibraryControls() {
     btn.addEventListener('click', () => {
       filterBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      state.libraryFilter = btn.getAttribute('data-filter');
+      stateManager.dispatch(prev => ({
+        ...prev,
+        libraryFilter: btn.getAttribute('data-filter') || 'all'
+      }));
       renderLibraryTable();
     });
   });
@@ -468,52 +638,56 @@ function renderLibraryTable() {
   if (!tbody) return;
 
   const filtered = ECO_LIBRARY_DB.filter(item => {
-    // Category match
     const categoryMatch = state.libraryFilter === 'all' || item.category === state.libraryFilter;
-    // Search match
     const text = (item.name + ' ' + item.description).toLowerCase();
     const searchMatch = state.librarySearch === '' || text.includes(state.librarySearch);
-    
     return categoryMatch && searchMatch;
   });
 
-  tbody.innerHTML = '';
+  while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
   
   if (filtered.length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="3" style="text-align: center; color: var(--text-dim); padding: 2rem;">
-          No matching carbon emission factors found.
-        </td>
-      </tr>
-    `;
+    const tr = createElementSafe('tr', null);
+    const td = createElementSafe('td', 'No matching carbon emission factors found.', { colspan: '4', style: 'text-align: center; color: var(--text-dim); padding: 2rem;' });
+    tr.appendChild(td);
+    tbody.appendChild(tr);
     return;
   }
 
+  const fragment = document.createDocumentFragment();
   filtered.forEach(item => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td style="font-weight:600;">${item.name}</td>
-      <td style="width: 100px;"><span class="difficulty-badge difficulty-easy" style="background:rgba(20,184,166,0.08); color:var(--color-teal); border-color:rgba(20,184,166,0.15)">${item.category}</span></td>
-      <td class="coef-val" style="width: 150px; text-align:right;">${item.carbonFactor}</td>
-      <td style="color: var(--text-muted); font-size: 0.8rem; max-width: 300px;">${item.description}</td>
-    `;
-    tbody.appendChild(tr);
+    const tr = createElementSafe('tr', null);
+    tr.appendChild(createElementSafe('td', item.name, { style: 'font-weight:600;' }));
+    const categoryCell = createElementSafe('td', null, { style: 'width: 100px;' });
+    const categoryBadge = createElementSafe('span', item.category, { class: 'difficulty-badge difficulty-easy', style: 'background:rgba(20,184,166,0.08); color:var(--color-teal); border-color:rgba(20,184,166,0.15);' });
+    categoryCell.appendChild(categoryBadge);
+    tr.appendChild(categoryCell);
+    tr.appendChild(createElementSafe('td', item.carbonFactor, { class: 'coef-val', style: 'width: 150px; text-align:right;' }));
+    tr.appendChild(createElementSafe('td', item.description, { style: 'color: var(--text-muted); font-size: 0.8rem; max-width: 300px;' }));
+    fragment.appendChild(tr);
   });
+  tbody.appendChild(fragment);
 }
+
 
 // Pro: Setup "What-If" Preset Selectors
 function setupScenarioPresets() {
   const cards = document.querySelectorAll('.scenario-preset-card');
   cards.forEach(card => {
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
     card.addEventListener('click', () => {
       cards.forEach(c => c.classList.remove('active'));
       card.classList.add('active');
-      
       const preset = card.getAttribute('data-scenario');
-      state.activeScenario = preset;
-      
+      stateManager.dispatch(prev => ({ ...prev, activeScenario: preset }));
       calculateAndRenderScenario();
+    });
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        card.click();
+      }
     });
   });
 }
@@ -558,6 +732,8 @@ function renderScenarioChart(baseVal, proposedVal) {
   const container = document.getElementById('scenario-chart-container');
   if (!container) return;
 
+  while (container.firstChild) container.removeChild(container.firstChild);
+
   const maxVal = Math.max(16, baseVal);
   const chartHeight = 180;
   const chartWidth = 320;
@@ -571,33 +747,54 @@ function renderScenarioChart(baseVal, proposedVal) {
     { name: '1.5°C Goal', val: 2.0, color: 'var(--color-green)' }
   ];
 
-  let bars = '';
+  const svg = createSvgElementSafe('svg', { class: 'svg-chart', viewBox: `0 0 ${chartWidth} ${chartHeight}` });
+  svg.appendChild(createSvgElementSafe('line', {
+    x1: 20,
+    y1: chartHeight - 20,
+    x2: chartWidth - 20,
+    y2: chartHeight - 20,
+    stroke: 'var(--border-glass)',
+    'stroke-width': '1'
+  }));
+
   data.forEach((item, idx) => {
     const x = padding + idx * colWidth + (colWidth - 30) / 2;
     const barHeight = (item.val / maxVal) * (chartHeight - 40);
     const y = chartHeight - 20 - barHeight;
 
-    bars += `
-      <g>
-        <rect 
-          x="${x}" y="${y}" width="30" height="${barHeight}" 
-          rx="6" 
-          fill="${item.color}"
-          style="transition: y 0.8s ease-in-out, height 0.8s ease-in-out;"
-        />
-        <text x="${x + 15}" y="${y - 8}" text-anchor="middle" fill="var(--text-main)" font-size="9" font-weight="600">${item.val.toFixed(1)}t</text>
-        <text x="${x + 15}" y="${chartHeight - 4}" text-anchor="middle" fill="var(--text-muted)" font-size="9">${item.name}</text>
-      </g>
-    `;
+    const group = createSvgElementSafe('g');
+    group.appendChild(createSvgElementSafe('rect', {
+      x,
+      y,
+      width: 30,
+      height: barHeight,
+      rx: 6,
+      fill: item.color,
+      style: 'transition: y 0.8s ease-in-out, height 0.8s ease-in-out;'
+    }));
+    const valueText = createSvgElementSafe('text', {
+      x: x + 15,
+      y: y - 8,
+      'text-anchor': 'middle',
+      fill: 'var(--text-main)',
+      'font-size': '9',
+      'font-weight': '600'
+    });
+    valueText.textContent = `${item.val.toFixed(1)}t`;
+    group.appendChild(valueText);
+    const labelText = createSvgElementSafe('text', {
+      x: x + 15,
+      y: chartHeight - 4,
+      'text-anchor': 'middle',
+      fill: 'var(--text-muted)',
+      'font-size': '9'
+    });
+    labelText.textContent = item.name;
+    group.appendChild(labelText);
+    svg.appendChild(group);
   });
 
-  container.innerHTML = `
-    <svg class="svg-chart" viewBox="0 0 ${chartWidth} ${chartHeight}">
-      <!-- Baseline axis -->
-      <line x1="20" y1="${chartHeight - 20}" x2="${chartWidth - 20}" y2="${chartHeight - 20}" stroke="var(--border-glass)" stroke-width="1" />
-      ${bars}
-    </svg>
-  `;
+  container.appendChild(svg);
 }
 
 // Carbon Footprint Mathematics
@@ -824,14 +1021,17 @@ function updateGaiaCoach(totalFootprint, breakdown) {
     ];
   }
 
-  speechBubble.innerHTML = feedbackText;
-  suggestionBox.innerHTML = '';
+  speechBubble.textContent = feedbackText;
+  while (suggestionBox.firstChild) suggestionBox.removeChild(suggestionBox.firstChild);
   tips.forEach(tip => {
-    const li = document.createElement('li');
+    const li = createElementSafe('li', null);
     li.style.marginBottom = '0.65rem';
     li.style.paddingLeft = '1rem';
     li.style.position = 'relative';
-    li.innerHTML = `<span style="position:absolute; left:0; color:var(--color-teal)">•</span> ${tip}`;
+    const bullet = createElementSafe('span', '•', { style: 'position:absolute; left:0; color:var(--color-teal);' });
+    const text = createElementSafe('span', tip);
+    li.appendChild(bullet);
+    li.appendChild(text);
     suggestionBox.appendChild(li);
   });
 }
@@ -861,9 +1061,11 @@ function renderDonutChart(breakdown) {
   const container = document.getElementById('donut-chart-container');
   if (!container) return;
 
+  while (container.firstChild) container.removeChild(container.firstChild);
+
   const total = breakdown.transport + breakdown.energy + breakdown.food + breakdown.waste;
   if (total === 0) {
-    container.innerHTML = '<span style="color:var(--text-dim)">Complete the calculator to view breakdown.</span>';
+    container.appendChild(createElementSafe('span', 'Complete the calculator to view breakdown.', { style: 'color:var(--text-dim)' }));
     return;
   }
 
@@ -878,53 +1080,83 @@ function renderDonutChart(breakdown) {
   safeSetTextContent('leg-waste-val', `${breakdown.waste.toFixed(1)} t (${pWaste.toFixed(0)}%)`);
 
   const radius = 60;
-  const circ = 2 * Math.PI * radius; // 377
+  const circ = 2 * Math.PI * radius;
   const center = 100;
 
-  let currentOffset = 0;
-
   const categories = [
-    { name: 'Transport', pct: pTransport, color: 'var(--color-green)' },
-    { name: 'Energy', pct: pEnergy, color: 'var(--color-teal)' },
-    { name: 'Food', pct: pFood, color: 'var(--color-purple)' },
-    { name: 'Waste', pct: pWaste, color: 'var(--color-amber)' }
+    { pct: pTransport, color: 'var(--color-green)' },
+    { pct: pEnergy, color: 'var(--color-teal)' },
+    { pct: pFood, color: 'var(--color-purple)' },
+    { pct: pWaste, color: 'var(--color-amber)' }
   ];
 
-  let svgElements = '';
+  const svg = createSvgElementSafe('svg', { class: 'svg-chart', viewBox: '0 0 200 200' });
+  svg.appendChild(createSvgElementSafe('circle', {
+    cx: center,
+    cy: center,
+    r: radius,
+    fill: 'none',
+    stroke: 'rgba(255,255,255,0.03)',
+    'stroke-width': '16'
+  }));
+
+  let currentOffset = 0;
   categories.forEach(cat => {
     if (cat.pct <= 0) return;
     const strokeDash = (cat.pct / 100) * circ;
     const strokeOffset = circ - strokeDash + currentOffset;
-    
-    svgElements += `
-      <circle 
-        cx="${center}" cy="${center}" r="${radius}"
-        fill="none" 
-        stroke="${cat.color}" 
-        stroke-width="16"
-        stroke-dasharray="${circ}"
-        stroke-dashoffset="${strokeOffset}"
-        stroke-linecap="round"
-        style="transform: rotate(-90deg); transform-origin: ${center}px ${center}px; transition: stroke-dashoffset 0.8s ease-in-out;"
-      />
-    `;
+    const circle = createSvgElementSafe('circle', {
+      cx: center,
+      cy: center,
+      r: radius,
+      fill: 'none',
+      stroke: cat.color,
+      'stroke-width': '16',
+      'stroke-dasharray': circ,
+      'stroke-dashoffset': strokeOffset,
+      'stroke-linecap': 'round',
+      style: `transform: rotate(-90deg); transform-origin: ${center}px ${center}px; transition: stroke-dashoffset 0.8s ease-in-out;`
+    });
+    svg.appendChild(circle);
     currentOffset -= strokeDash;
   });
 
-  container.innerHTML = `
-    <svg class="svg-chart" viewBox="0 0 200 200">
-      <circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="16" />
-      ${svgElements}
-      <circle cx="${center}" cy="${center}" r="45" fill="var(--bg-dark)" />
-      <text x="${center}" y="${center - 5}" text-anchor="middle" fill="var(--text-muted)" font-size="9" font-family="var(--font-body)">TOTAL</text>
-      <text x="${center}" y="${center + 12}" text-anchor="middle" fill="var(--text-main)" font-size="16" font-family="var(--font-title)" font-weight="700">${total.toFixed(1)}t</text>
-    </svg>
-  `;
+  svg.appendChild(createSvgElementSafe('circle', {
+    cx: center,
+    cy: center,
+    r: 45,
+    fill: 'var(--bg-dark)'
+  }));
+  const totalLabel = createSvgElementSafe('text', {
+    x: center,
+    y: center - 5,
+    'text-anchor': 'middle',
+    fill: 'var(--text-muted)',
+    'font-size': '9',
+    'font-family': 'var(--font-body)'
+  });
+  totalLabel.textContent = 'TOTAL';
+  svg.appendChild(totalLabel);
+  const totalValue = createSvgElementSafe('text', {
+    x: center,
+    y: center + 12,
+    'text-anchor': 'middle',
+    fill: 'var(--text-main)',
+    'font-size': '16',
+    'font-family': 'var(--font-title)',
+    'font-weight': '700'
+  });
+  totalValue.textContent = `${total.toFixed(1)}t`;
+  svg.appendChild(totalValue);
+
+  container.appendChild(svg);
 }
 
 function renderComparisonChart(userVal) {
   const container = document.getElementById('comparison-chart-container');
   if (!container) return;
+
+  while (container.firstChild) container.removeChild(container.firstChild);
 
   const BENCHMARKS = [
     { name: 'You', val: userVal, color: 'url(#gradient-user)' },
@@ -938,46 +1170,70 @@ function renderComparisonChart(userVal) {
   const chartHeight = 180;
   const chartWidth = 320;
   const padding = 30;
-
-  let bars = '';
   const colWidth = (chartWidth - padding * 2) / BENCHMARKS.length;
+
+  const svg = createSvgElementSafe('svg', { class: 'svg-chart', viewBox: `0 0 ${chartWidth} ${chartHeight}` });
+  const defs = createSvgElementSafe('defs');
+  const gradient = createSvgElementSafe('linearGradient', { id: 'gradient-user', x1: 0, y1: 0, x2: 0, y2: 1 });
+  gradient.appendChild(createSvgElementSafe('stop', { offset: '0%', 'stop-color': 'var(--color-green)' }));
+  gradient.appendChild(createSvgElementSafe('stop', { offset: '100%', 'stop-color': 'var(--color-teal)' }));
+  defs.appendChild(gradient);
+  svg.appendChild(defs);
+
+  svg.appendChild(createSvgElementSafe('line', {
+    x1: 15,
+    y1: chartHeight - 20,
+    x2: chartWidth - 15,
+    y2: chartHeight - 20,
+    stroke: 'var(--border-glass)',
+    'stroke-width': '1'
+  }));
 
   BENCHMARKS.forEach((item, idx) => {
     const x = padding + idx * colWidth + (colWidth - 28) / 2;
     const barHeight = (item.val / maxVal) * (chartHeight - 40);
     const y = chartHeight - 20 - barHeight;
-
-    bars += `
-      <g>
-        <rect 
-          x="${x}" y="${y}" width="28" height="${barHeight}" 
-          rx="6" 
-          fill="${item.color}"
-          style="transition: y 0.8s ease-in-out, height 0.8s ease-in-out;"
-        />
-        <text x="${x + 14}" y="${y - 8}" text-anchor="middle" fill="var(--text-main)" font-size="9" font-weight="600">${item.val.toFixed(1)}t</text>
-        <text x="${x + 14}" y="${chartHeight - 4}" text-anchor="middle" fill="var(--text-muted)" font-size="9" font-family="var(--font-body)">${item.name}</text>
-      </g>
-    `;
+    const group = createSvgElementSafe('g');
+    group.appendChild(createSvgElementSafe('rect', {
+      x,
+      y,
+      width: 28,
+      height: barHeight,
+      rx: 6,
+      fill: item.color,
+      style: 'transition: y 0.8s ease-in-out, height 0.8s ease-in-out;'
+    }));
+    const valueText = createSvgElementSafe('text', {
+      x: x + 14,
+      y: y - 8,
+      'text-anchor': 'middle',
+      fill: 'var(--text-main)',
+      'font-size': '9',
+      'font-weight': '600'
+    });
+    valueText.textContent = `${item.val.toFixed(1)}t`;
+    group.appendChild(valueText);
+    const labelText = createSvgElementSafe('text', {
+      x: x + 14,
+      y: chartHeight - 4,
+      'text-anchor': 'middle',
+      fill: 'var(--text-muted)',
+      'font-size': '9',
+      'font-family': 'var(--font-body)'
+    });
+    labelText.textContent = item.name;
+    group.appendChild(labelText);
+    svg.appendChild(group);
   });
 
-  container.innerHTML = `
-    <svg class="svg-chart" viewBox="0 0 ${chartWidth} ${chartHeight}">
-      <defs>
-        <linearGradient id="gradient-user" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--color-green)" />
-          <stop offset="100%" stop-color="var(--color-teal)" />
-        </linearGradient>
-      </defs>
-      <line x1="15" y1="${chartHeight - 20}" x2="${chartWidth - 15}" y2="${chartHeight - 20}" stroke="var(--border-glass)" stroke-width="1" />
-      ${bars}
-    </svg>
-  `;
+  container.appendChild(svg);
 }
 
 function renderForecastChart(currentEmissions) {
   const container = document.getElementById('forecast-chart-container');
   if (!container) return;
+
+  while (container.firstChild) container.removeChild(container.firstChild);
 
   const years = [2026, 2028, 2030, 2032, 2034, 2036];
   const chartHeight = 180;
@@ -988,49 +1244,110 @@ function renderForecastChart(currentEmissions) {
   const startVal = currentEmissions;
   const maxVal = Math.max(16, startVal);
 
-  const bau = years.map((y, idx) => startVal * (1 + (idx * 0.01)));
-  const target = years.map((y, idx) => {
+  const bau = years.map((_, idx) => startVal * (1 + idx * 0.01));
+  const target = years.map((_, idx) => {
     const fraction = idx / (years.length - 1);
     return startVal - (startVal - 2.0) * fraction;
   });
 
-  const getPointsStr = (values) => {
-    return values.map((val, idx) => {
-      const x = paddingX + (idx / (years.length - 1)) * (chartWidth - paddingX * 2);
-      const y = chartHeight - paddingY - (val / maxVal) * (chartHeight - paddingY * 2);
-      return `${x},${y}`;
-    }).join(' ');
-  };
+  const getPointsStr = (values) => values.map((val, idx) => {
+    const x = paddingX + (idx / (years.length - 1)) * (chartWidth - paddingX * 2);
+    const y = chartHeight - paddingY - (val / maxVal) * (chartHeight - paddingY * 2);
+    return `${x},${y}`;
+  }).join(' ');
 
   const pointsBau = getPointsStr(bau);
   const pointsTarget = getPointsStr(target);
 
-  let gridLines = '';
-  let yearLabels = '';
+  const svg = createSvgElementSafe('svg', { class: 'svg-chart', viewBox: `0 0 ${chartWidth} ${chartHeight}` });
+  svg.appendChild(createSvgElementSafe('line', {
+    x1: paddingX,
+    y1: paddingY,
+    x2: paddingX,
+    y2: chartHeight - paddingY,
+    stroke: 'var(--border-glass)',
+    'stroke-width': '1'
+  }));
+
+  const maxLabel = createSvgElementSafe('text', {
+    x: paddingX - 6,
+    y: paddingY + 3,
+    'text-anchor': 'end',
+    fill: 'var(--text-dim)',
+    'font-size': '7'
+  });
+  maxLabel.textContent = `${maxVal.toFixed(0)}t`;
+  svg.appendChild(maxLabel);
+
+  const zeroLabel = createSvgElementSafe('text', {
+    x: paddingX - 6,
+    y: chartHeight - paddingY + 3,
+    'text-anchor': 'end',
+    fill: 'var(--text-dim)',
+    'font-size': '7'
+  });
+  zeroLabel.textContent = '0t';
+  svg.appendChild(zeroLabel);
+
   years.forEach((yr, idx) => {
     const x = paddingX + (idx / (years.length - 1)) * (chartWidth - paddingX * 2);
-    gridLines += `<line x1="${x}" y1="${paddingY}" x2="${x}" y2="${chartHeight - paddingY}" stroke="rgba(255,255,255,0.02)" stroke-width="1" />`;
-    yearLabels += `<text x="${x}" y="${chartHeight - 4}" text-anchor="middle" fill="var(--text-muted)" font-size="8">${yr}</text>`;
+    svg.appendChild(createSvgElementSafe('line', {
+      x1: x,
+      y1: paddingY,
+      x2: x,
+      y2: chartHeight - paddingY,
+      stroke: 'rgba(255,255,255,0.02)',
+      'stroke-width': '1'
+    }));
+    const yearText = createSvgElementSafe('text', {
+      x,
+      y: chartHeight - 4,
+      'text-anchor': 'middle',
+      fill: 'var(--text-muted)',
+      'font-size': '8'
+    });
+    yearText.textContent = String(yr);
+    svg.appendChild(yearText);
   });
 
-  const targetY = chartHeight - paddingY - (2.0 / maxVal) * (chartHeight - paddingY * 2);
-  const limitLine = `
-    <line x1="${paddingX}" y1="${targetY}" x2="${chartWidth - paddingX}" y2="${targetY}" stroke="rgba(16, 185, 129, 0.2)" stroke-dasharray="4,4" stroke-width="1.5" />
-    <text x="${chartWidth - paddingX + 5}" y="${targetY + 3}" fill="var(--color-green)" font-size="7" font-weight="700">1.5°CLimit (2.0t)</text>
-  `;
+  svg.appendChild(createSvgElementSafe('polyline', {
+    fill: 'none',
+    stroke: 'var(--color-amber)',
+    'stroke-width': '2',
+    'stroke-dasharray': '2,2',
+    opacity: '0.6',
+    points: pointsBau
+  }));
 
-  container.innerHTML = `
-    <svg class="svg-chart" viewBox="0 0 ${chartWidth} ${chartHeight}">
-      <line x1="${paddingX}" y1="${paddingY}" x2="${paddingX}" y2="${chartHeight - paddingY}" stroke="var(--border-glass)" stroke-width="1" />
-      <text x="${paddingX - 6}" y="${paddingY + 3}" text-anchor="end" fill="var(--text-dim)" font-size="7">${maxVal.toFixed(0)}t</text>
-      <text x="${paddingX - 6}" y="${chartHeight - paddingY + 3}" text-anchor="end" fill="var(--text-dim)" font-size="7">0t</text>
-      ${gridLines}
-      ${limitLine}
-      <polyline fill="none" stroke="var(--color-amber)" stroke-width="2" stroke-dasharray="2,2" opacity="0.6" points="${pointsBau}" />
-      <polyline fill="none" stroke="var(--color-green)" stroke-width="3" points="${pointsTarget}" />
-      ${yearLabels}
-    </svg>
-  `;
+  svg.appendChild(createSvgElementSafe('polyline', {
+    fill: 'none',
+    stroke: 'var(--color-green)',
+    'stroke-width': '3',
+    points: pointsTarget
+  }));
+
+  const targetY = chartHeight - paddingY - (2.0 / maxVal) * (chartHeight - paddingY * 2);
+  svg.appendChild(createSvgElementSafe('line', {
+    x1: paddingX,
+    y1: targetY,
+    x2: chartWidth - paddingX,
+    y2: targetY,
+    stroke: 'rgba(16, 185, 129, 0.2)',
+    'stroke-dasharray': '4,4',
+    'stroke-width': '1.5'
+  }));
+
+  const limitText = createSvgElementSafe('text', {
+    x: chartWidth - paddingX + 5,
+    y: targetY + 3,
+    fill: 'var(--color-green)',
+    'font-size': '7',
+    'font-weight': '700'
+  });
+  limitText.textContent = '1.5°C Limit (2.0t)';
+  svg.appendChild(limitText);
+
+  container.appendChild(svg);
 }
 
 // Render Community leaderboard list
@@ -1038,8 +1355,6 @@ function renderCommunityView() {
   const tableBody = document.getElementById('leaderboard-body');
   if (!tableBody) return;
 
-  const baseTons = calculateBaseCarbonFootprint();
-  
   let totalSavingsKg = 0;
   state.completedActions.forEach(actionId => {
     const act = CHECKLIST_ACTIONS.find(a => a.id === actionId);
@@ -1051,7 +1366,6 @@ function renderCommunityView() {
   totalSavingsKg += state.offsetsPurchased;
   
   const userScore = totalSavingsKg;
-
   let currentLevel = 'Seedling';
   const unlockedBadges = document.querySelectorAll('.badge-item.unlocked').length;
   if (unlockedBadges === 2) currentLevel = 'Carbon Cutter';
@@ -1069,35 +1383,39 @@ function renderCommunityView() {
   const combined = [...MOCK_LEADERBOARD, userProfile];
   combined.sort((a, b) => b.saved - a.saved);
 
-  tableBody.innerHTML = '';
-  combined.forEach((person, idx) => {
-    const isGold = idx === 0;
-    const isSilver = idx === 1;
-    const isBronze = idx === 2;
-    
-    let rankBadge = idx + 1;
-    if (isGold) rankBadge = `<span class="rank-indicator rank-1">1</span>`;
-    else if (isSilver) rankBadge = `<span class="rank-indicator rank-2">2</span>`;
-    else if (isBronze) rankBadge = `<span class="rank-indicator rank-3">3</span>`;
-    else rankBadge = `<span class="rank-indicator">${idx + 1}</span>`;
+  while (tableBody.firstChild) tableBody.removeChild(tableBody.firstChild);
+  const fragment = document.createDocumentFragment();
 
-    const row = document.createElement('tr');
-    row.className = `leaderboard-row ${person.active ? 'user-row' : ''}`;
-    row.innerHTML = `
-      <td style="width: 50px;">${rankBadge}</td>
-      <td>
-        <div class="leaderboard-user">
-          <div class="leaderboard-avatar" style="background: ${person.active ? 'linear-gradient(135deg, var(--color-green), var(--color-teal))' : 'rgba(255,255,255,0.06)'}; color: ${person.active ? '#0b1329' : 'var(--text-main)'}">
-            ${person.avatar}
-          </div>
-          <span style="font-weight: ${person.active ? '700' : '500'}">${person.name}</span>
-        </div>
-      </td>
-      <td><span class="leaderboard-level">${person.level}</span></td>
-      <td class="leaderboard-saving">${(person.saved / 1000).toFixed(2)} t CO₂</td>
-    `;
-    tableBody.appendChild(row);
+  combined.forEach((person, idx) => {
+    const row = createElementSafe('tr', null, { class: `leaderboard-row ${person.active ? 'user-row' : ''}` });
+    const rankCell = createElementSafe('td', null, { style: 'width: 50px;' });
+    const rankIndicator = createElementSafe('span', String(idx + 1), { class: `rank-indicator ${idx === 0 ? 'rank-1' : idx === 1 ? 'rank-2' : idx === 2 ? 'rank-3' : ''}` });
+    if (idx === 0 || idx === 1 || idx === 2) {
+      rankIndicator.textContent = String(idx + 1);
+    }
+    rankCell.appendChild(rankIndicator);
+    const profileCell = createElementSafe('td', null);
+    const profileContainer = createElementSafe('div', null, { class: 'leaderboard-user' });
+    const avatar = createElementSafe('div', person.avatar, { class: 'leaderboard-avatar' });
+    avatar.style.background = person.active ? 'linear-gradient(135deg, var(--color-green), var(--color-teal))' : 'rgba(255,255,255,0.06)';
+    avatar.style.color = person.active ? '#0b1329' : 'var(--text-main)';
+    profileContainer.appendChild(avatar);
+    profileContainer.appendChild(createElementSafe('span', person.name, { style: `font-weight: ${person.active ? '700' : '500'};` }));
+    profileCell.appendChild(profileContainer);
+
+    const levelCell = createElementSafe('td', null);
+    levelCell.appendChild(createElementSafe('span', person.level, { class: 'leaderboard-level' }));
+
+    const savedCell = createElementSafe('td', `${(person.saved / 1000).toFixed(2)} t CO₂`, { class: 'leaderboard-saving' });
+
+    row.appendChild(rankCell);
+    row.appendChild(profileCell);
+    row.appendChild(levelCell);
+    row.appendChild(savedCell);
+    fragment.appendChild(row);
   });
+
+  tableBody.appendChild(fragment);
 }
 
 // Local Storage Handlers
@@ -1126,4 +1444,13 @@ function loadStateFromLocalStorage() {
       console.error('Error parsing localStorage state:', e);
     }
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.StateManager = StateManager;
+  window.sanitizeText = sanitizeText;
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { StateManager, sanitizeText };
 }
