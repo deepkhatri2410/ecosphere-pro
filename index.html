@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div aria-live="polite" aria-atomic="true" class="sr-only" id="aria-live-region">Application status updates will appear here.</div>
 
   <!-- Ambient glowing blobs -->
   <div class="ambient-bg">
@@ -30,38 +32,38 @@
           <span class="logo-text">EcoSphere Pro</span>
         </div>
         
-        <nav class="nav-links">
-          <a class="nav-item active" data-view="dashboard">
+        <nav class="nav-links" role="navigation" aria-label="Main navigation">
+          <a class="nav-item active" data-view="dashboard" href="#dashboard" aria-current="page">
             <svg viewBox="0 0 24 24">
               <path d="M3 13h1v7c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-7h1a1 1 0 00.7-1.7l-9-9a1 1 0 00-1.4 0l-9 9A1 1 0 003 13zm7 7v-5h4v5h-4z"/>
             </svg>
             <span>Dashboard</span>
           </a>
-          <a class="nav-item" data-view="calculator">
+          <a class="nav-item" data-view="calculator" href="#calculator">
             <svg viewBox="0 0 24 24">
               <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4 6h-2v2h2v2h-2v-2H9v-2h2V9H9V7h2V5h2v2h2v2z"/>
             </svg>
             <span>Calculator</span>
           </a>
-          <a class="nav-item" data-view="actionplan">
+          <a class="nav-item" data-view="actionplan" href="#actionplan">
             <svg viewBox="0 0 24 24">
               <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
             </svg>
             <span>Action Plan</span>
           </a>
-          <a class="nav-item" data-view="offsets">
+          <a class="nav-item" data-view="offsets" href="#offsets">
             <svg viewBox="0 0 24 24">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/>
             </svg>
             <span>Offsets</span>
           </a>
-          <a class="nav-item" data-view="community">
+          <a class="nav-item" data-view="community" href="#community">
             <svg viewBox="0 0 24 24">
               <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V20h14v-3.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V20h6v-3.5c0-2.33-4.67-3.5-7-3.5z"/>
             </svg>
             <span>Community</span>
           </a>
-          <a class="nav-item" data-view="learn">
+          <a class="nav-item" data-view="learn" href="#learn">
             <svg viewBox="0 0 24 24">
               <path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zM5.47 18.68L12 22l6.53-3.32c-.75-.41-1.57-.68-2.53-.68H8c-.96 0-1.78.27-2.53.68z"/>
             </svg>
@@ -82,13 +84,13 @@
     </aside>
 
     <!-- Main Content Panel -->
-    <main class="main-content">
+    <main id="main-content" class="main-content" role="main">
       
       <!-- Top header layout -->
       <div class="header-row">
         <h1 class="page-title">Climate Command Pro</h1>
         <div style="display:flex; gap:1rem; align-items:center;">
-          <button class="btn-outline" onclick="window.print()" style="padding:0.45rem 1rem; font-size:0.8rem; display:flex; align-items:center; gap:0.5rem;">
+          <button id="btn-export" type="button" class="btn-outline" style="padding:0.45rem 1rem; font-size:0.8rem; display:flex; align-items:center; gap:0.5rem;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
             Export Report (PDF)
           </button>
@@ -264,11 +266,11 @@
             </h3>
             
             <!-- Category Tabs inside questionnaire -->
-            <div class="tabs-calc-container">
-              <div class="tab-calc active" onclick="switchCalcTab('calc-transit')">Transportation</div>
-              <div class="tab-calc" onclick="switchCalcTab('calc-energy')">Home Energy</div>
-              <div class="tab-calc" onclick="switchCalcTab('calc-diet')">Diet & Food</div>
-              <div class="tab-calc" onclick="switchCalcTab('calc-waste')">Shopping & Waste</div>
+            <div class="tabs-calc-container" role="tablist" aria-label="Carbon calculator categories">
+              <button type="button" class="tab-calc active" data-tab-target="calc-transit" role="tab" aria-selected="true">Transportation</button>
+              <button type="button" class="tab-calc" data-tab-target="calc-energy" role="tab" aria-selected="false">Home Energy</button>
+              <button type="button" class="tab-calc" data-tab-target="calc-diet" role="tab" aria-selected="false">Diet & Food</button>
+              <button type="button" class="tab-calc" data-tab-target="calc-waste" role="tab" aria-selected="false">Shopping & Waste</button>
             </div>
 
             <!-- TAB 1: Transit -->
@@ -480,7 +482,7 @@
             </div>
             
             <div style="margin-top:2rem; display:flex; justify-content:flex-end;">
-              <button class="btn-primary" onclick="switchView('dashboard')">
+              <button id="btn-go-dashboard" type="button" class="btn-primary">
                 <span>View Dashboard</span>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
               </button>
@@ -713,7 +715,7 @@
             <p class="article-desc">
               Not all offsets are created equal. Discover how subtraction verification, additionality testing, and leakage assessments certify gold-standard credits.
             </p>
-            <a href="#" class="article-link" onclick="alert('Accessing article metadata...'); return false;">
+            <a href="#" class="article-link" data-article="science-offsets">
               <span>Read Article</span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </a>
@@ -727,7 +729,7 @@
             <p class="article-desc">
               From heat pump transitions to smart panel installations, learn how minor utility adjustments slash up to 60% off household grid draw.
             </p>
-            <a href="#" class="article-link" onclick="alert('Accessing article metadata...'); return false;">
+            <a href="#" class="article-link" data-article="smart-home">
               <span>Read Article</span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </a>
@@ -741,7 +743,7 @@
             <p class="article-desc">
               A deep dive into agricultural carbon outputs. Learn why eating local produce and plant-based swaps reduces global supply chain footprint.
             </p>
-            <a href="#" class="article-link" onclick="alert('Accessing article metadata...'); return false;">
+            <a href="#" class="article-link" data-article="food-miles">
               <span>Read Article</span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </a>
@@ -792,19 +794,5 @@
   </div>
 
   <script src="app.js"></script>
-  <script>
-    // Sub-view tab navigation for calculator
-    function switchCalcTab(tabId) {
-      document.querySelectorAll('.tab-calc').forEach(tab => {
-        tab.classList.remove('active');
-      });
-      event.target.classList.add('active');
-
-      document.querySelectorAll('.calc-step').forEach(step => {
-        step.classList.remove('active');
-      });
-      document.getElementById(tabId).classList.add('active');
-    }
-  </script>
 </body>
 </html>
